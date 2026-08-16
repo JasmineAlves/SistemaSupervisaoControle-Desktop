@@ -1,104 +1,66 @@
-# Controle da comunicação com o hardware
-import sys
-import serial.tools.list_ports
-from PySide6.QtWidgets import QWidget, QApplication
+from PySide6.QtWidgets import QWidget
 from ui.Ui_comunicacao import Ui_Form
+from models.comunicacao import ComunicacaoModel
 
 
 class ComunicacaoController(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, model=None):
         super().__init__(parent)
 
         self.ui = Ui_Form()
         self.ui.setupUi(self)
 
-        # Guarda o estado atual da conexão serial
-        self.is_connected = False
+        # Instancia ou recebe o model completo
+        self.model = model if model else ComunicacaoModel()
 
-        # Configura as ações de clique dos botões
         self.configurar_sinais()
-
-        # Busca e exibe as portas COM disponíveis
         self.carregar_portas_com()
-
-        # Configura o estado inicial dos componentes da tela
         self.atualizar_interface()
 
     def configurar_sinais(self):
-        # Conecta os botões da tela às suas respetivas funções
-
-        self.ui.btn_conectar.clicked.connect(
-            self.ao_conectar
-        )
-
-        self.ui.btn_desconectar.clicked.connect(
-            self.ao_desconectar
-        )
+        self.ui.btn_conectar.clicked.connect(self.ao_conectar)
+        self.ui.btn_desconectar.clicked.connect(self.ao_desconectar)
 
     def carregar_portas_com(self):
-        # Mapeia e popula as portas COM reais no QComboBox
-
         self.ui.combo_porta.clear()
-
-        portas = serial.tools.list_ports.comports()
+        
+        # O Model realiza a varredura do hardware
+        portas = self.model.listar_portas()
 
         if portas:
-            for porta in portas:
-                self.ui.combo_porta.addItem(porta.device)
+            self.ui.combo_porta.addItems(portas)
         else:
             self.ui.combo_porta.addItem("Nenhuma porta encontrada")
 
     def ao_conectar(self):
-        # Trata o evento de conexão na etapa A1/1
-
-        # Valida se existe uma porta válida selecionada
-        if self.ui.combo_porta.currentText() == "Nenhuma porta encontrada":
-            self.ui.lbl_status.setText(
-                "Status : Erro - Nenhuma porta selecionada"
-            )
-            return
-
-        # Captura os valores informados no painel
         porta = self.ui.combo_porta.currentText()
         baud_rate = self.ui.combo_baud.currentText()
         timeout = self.ui.spin_timeout.value()
 
-        # Atualiza o estado visual para conectado
-        self.is_connected = True
+        # O Model processa a conexão
+        sucesso = self.model.conectar(porta, baud_rate, timeout)
 
-        self.ui.lbl_status.setText(
-            f"Status : Conectado ({porta} @ {baud_rate} bps, timeout: {timeout}s)"
-        )
-
-        # Bloqueia os seletores durante a conexão
-        self.atualizar_interface()
+        if sucesso:
+            self.ui.lbl_status.setText(self.model.obter_status())
+            self.atualizar_interface()
+        else:
+            self.ui.lbl_status.setText("Status : Erro - Nenhuma porta selecionada")
 
     def ao_desconectar(self):
-        # Trata o evento de desconexão na etapa A1/1
-
-        # Atualiza o estado visual para desconectado
-        self.is_connected = False
-
-        self.ui.lbl_status.setText(
-            "Status : Desconectado"
-        )
-
-        # Atualiza novamente a lista para identificar novas portas
+        # O Model executa o encerramento
+        self.model.desconectar()
+        
+        self.ui.lbl_status.setText(self.model.obter_status())
         self.carregar_portas_com()
-
-        # Habilita os campos de edição
         self.atualizar_interface()
 
     def atualizar_interface(self):
-        # Habilita ou desabilita os elementos conforme o estado da conexão
+        # O Controller apenas consulta o estado no Model
+        conectado = self.model.is_connected
 
-        conectado = self.is_connected
-
-        # Entradas de configuração
         self.ui.combo_porta.setEnabled(not conectado)
         self.ui.combo_baud.setEnabled(not conectado)
         self.ui.spin_timeout.setEnabled(not conectado)
 
-        # Controle de botões
         self.ui.btn_conectar.setEnabled(not conectado)
         self.ui.btn_desconectar.setEnabled(conectado)
