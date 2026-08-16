@@ -4,7 +4,7 @@ import random # Simular valores do hardware
 from datetime import datetime, timedelta # data/hora e intervalo de tempo
 import pyqtgraph as pg # desenhar gráficos
 from PySide6.QtCore import QTimer # Executa função a cada certo período
-from PySide6.QtWidgets import QMainWindow, QTableWidgetItem # Base da janela principal e texto dentro das células da tabela
+from PySide6.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox # Base da janela principal e texto dentro das células da tabela
 from ui.Ui_dashboard import Ui_MainWindow # Interface criada pelo Qt Designer
 from models.medicao import Medicao # Medições
 from models.registro import Registro # Evento registrado no sistema
@@ -67,6 +67,86 @@ class DashController(QMainWindow):
 
         # Att a telemetria a cada 1s
         self.timer.start(1000)
+
+        # Guarda o estado do corte de emergência
+        self.corte_emergencia_ativo = False
+        # Controla o corte de emergência
+        self.ui.btn_corte_emergencia.clicked.connect(
+            self.alternar_corte_emergencia
+        )
+
+        # Guarda o limite anterior para registrar alterações
+        self.limite_anterior = self.ui.spin_limite_potencia.value()
+
+        # Verifica o limite quando ele é alterado
+        self.ui.spin_limite_potencia.valueChanged.connect(
+            self.verificar_limite
+        )
+
+    def alternar_corte_emergencia(self):
+        # Confirma o corte ou a reativação do sistema
+
+        if not self.corte_emergencia_ativo:
+
+            resposta = QMessageBox.question(
+                self,
+                "Corte de emergência",
+                "Deseja realizar o corte de emergência?"
+            )
+
+            if resposta == QMessageBox.StandardButton.Yes:
+
+                # Desliga o disjuntor
+                self.medicao_atual.disjuntor = False
+
+                # Atualiza o estado do corte
+                self.corte_emergencia_ativo = True
+
+                # Registra o corte
+                self.adicionar_registro(
+                    tipo="Alerta",
+                    descricao="Corte de emergência acionado.",
+                    valor=self.formatar_medicao()
+                )
+
+                # Atualiza a interface
+                self.atualizar_dashboard()
+
+                # Altera o texto do botão
+                self.ui.btn_corte_emergencia.setText(
+                    "▶  REATIVAR SISTEMA"
+                )
+
+        else:
+
+            resposta = QMessageBox.question(
+                self,
+                "Reativar sistema",
+                "Deseja reativar o sistema?"
+            )
+
+            if resposta == QMessageBox.StandardButton.Yes:
+
+                # Religa o disjuntor
+                self.medicao_atual.disjuntor = True
+
+                # Atualiza o estado do corte
+                self.corte_emergencia_ativo = False
+
+                # Registra a reativação
+                self.adicionar_registro(
+                    tipo="Status",
+                    descricao="Sistema reativado após corte de emergência.",
+                    valor=self.formatar_medicao()
+                )
+
+                # Atualiza a interface
+                self.atualizar_dashboard()
+
+                # Altera o texto do botão
+                self.ui.btn_corte_emergencia.setText(
+                    "⚠  CORTE DE EMERGÊNCIA"
+                )    
 
     # Cria e configura gráfico
     def configurar_grafico(self):
@@ -134,16 +214,13 @@ class DashController(QMainWindow):
                 hours=24 - (indice * 0.5)
             )
 
-            # Simula tensão aleatória
-            tensao = random.uniform(
-                218.0,
-                222.0
-            )
-            # Simula corrente aleatória
-            corrente = random.uniform(
-                5.0,
-                10.0
-            )
+            # Simula tensão e corrente aleatórias com base no disjuntor
+            if self.medicao_atual.disjuntor:
+                tensao = random.uniform(218.0, 222.0)
+                corrente = random.uniform(7.0, 10.0)
+            else:
+                tensao = 0.0
+                corrente = 0.0
             # Calcula potência
             potencia = tensao * corrente
 
@@ -180,20 +257,20 @@ class DashController(QMainWindow):
         # Simula uma nova medição recebida, como se fosse um hardware
         # Simula tensão e corrente
 
-        tensao = random.uniform(
-            218.0,
-            222.0
-        )
+        # Simula tensão e corrente com base no estado do disjuntor
+        if self.medicao_atual.disjuntor:
+            tensao = random.uniform(218.0, 222.0)
+            corrente = random.uniform(7.0, 10.0)
+        else:
+            tensao = 0.0
+            corrente = 0.0
 
-        corrente = random.uniform(
-            7.0,
-            10.0
-        )
         # Cria uma nova medição
+        # Mantém o estado atual do disjuntor
         self.medicao_atual = Medicao(
             v=tensao,
             i=corrente,
-            disjuntor=True # Nesse código o disjuntor está sempre fechado
+            disjuntor=self.medicao_atual.disjuntor # O disjuntor agora pode ser alterado entre fechado e aberto
         )
 
         # Adiciona a nova potência ao histórico
@@ -241,7 +318,7 @@ class DashController(QMainWindow):
         # Atualiza estado do disjuntor
         if medicao.disjuntor: # Se True
             self.ui.lbl_status_disjuntor.setText( 
-                "●  FECHADO / NORMAL"
+                "FECHADO / NORMAL"
             )
 
             self.ui.lbl_status_detalhe.setText(
@@ -250,7 +327,7 @@ class DashController(QMainWindow):
 
         else: # Se False
             self.ui.lbl_status_disjuntor.setText(
-                "●  ABERTO / PROTEÇÃO ATIVADA"
+                "ABERTO / PROTEÇÃO ATIVADA"
             )
 
             self.ui.lbl_status_detalhe.setText(
@@ -265,6 +342,25 @@ class DashController(QMainWindow):
         self.ui.lbl_status_atualizacao.setText(
             f"Última atualização: {horario}"
         )
+
+    def verificar_limite(self):
+        # Verifica o limite usando a medição atual
+
+        limite = self.ui.spin_limite_potencia.value()
+
+        ultrapassou_limite = (
+            self.medicao_atual.potencia > limite
+        )
+
+        if ultrapassou_limite:
+            self.ui.lbl_valor_potencia.setStyleSheet(
+                "color: #D64545; font-weight: bold;"
+            )
+        else:
+            self.ui.lbl_valor_potencia.setStyleSheet(
+                "font-weight: bold;"
+            )
+
 
     def verificar_eventos(self):
         # Verifica se aconteceu alguma mudança relevante
@@ -297,7 +393,17 @@ class DashController(QMainWindow):
             medicao.potencia > limite
         )
 
-        # Registra somente quando entra na condição de alerta
+        # Atualiza a indicação visual do limite
+        if ultrapassou_limite:
+            self.ui.lbl_valor_potencia.setStyleSheet(
+                "color: #D64545; font-weight: bold;"
+            )
+        else:
+            self.ui.lbl_valor_potencia.setStyleSheet(
+                "font-weight: bold;"
+            )
+
+                # Registra somente quando entra na condição de alerta
         if (
             ultrapassou_limite
             and not self.limite_ultrapassado
@@ -336,7 +442,8 @@ class DashController(QMainWindow):
 
         for registro in self.registros:
 
-            linha = self.ui.tabela_registros.rowCount()
+            # Para registros ocorrerem em ordem decrescente
+            linha = 0
 
             self.ui.tabela_registros.insertRow(
                 linha
@@ -380,31 +487,19 @@ class DashController(QMainWindow):
                 )
             )
 
-        # Ajusta as colunas ao conteúdo
-        self.ui.tabela_registros.resizeColumnsToContents()
-
     def configurar_tabela(self):
         # Configura o tamanho das colunas da tabela
 
-        self.ui.tabela_registros.setColumnWidth(
-            0,
-            150
-        )
+        # Define tamanhos iniciais das colunas da tabela de auditoria
+        self.ui.tabela_registros.setColumnWidth(0, 200)
+        self.ui.tabela_registros.setColumnWidth(1, 120)
+        self.ui.tabela_registros.setColumnWidth(2, 200)
 
-        self.ui.tabela_registros.setColumnWidth(
-            1,
-            100
-        )
+        # Faz a descrição ocupar o espaço restante e evitar espaço vazio que estava aparecendo
+        self.ui.tabela_registros.horizontalHeader().setStretchLastSection(True)
 
-        self.ui.tabela_registros.setColumnWidth(
-            2,
-            180
-        )
-
-        self.ui.tabela_registros.setColumnWidth(
-            3,
-            500
-        )
+        # Para evitar um espaço vazio que estava aparecendo à direita
+        self.ui.tabela_registros.horizontalHeader().setStretchLastSection(True)
 
     def formatar_medicao(self):
         # Formata a medição para mostrar nos registros

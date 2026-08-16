@@ -8,7 +8,6 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-# Descreve visualmente a janela, é onde abrimos no Qt Designer
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
     QMetaObject, QObject, QPoint, QRect,
     QSize, QTime, QUrl, Qt)
@@ -36,6 +35,15 @@ class Ui_MainWindow(object):
 "QWidget {\n"
 "    font-family: \"Segoe UI\";\n"
 "    color: #1A1030;\n"
+"}\n"
+"\n"
+"QMessageBox {\n"
+"    background-color: #3D1A6B;\n"
+"    color: #ffffff;\n"
+"}\n"
+"\n"
+"QMessageBox QLabel {\n"
+"    color: #ffffff;\n"
 "}\n"
 "\n"
 "/* ===== Cabe\u00e7alho ===== */\n"
@@ -66,13 +74,13 @@ class Ui_MainWindow(object):
 "    padding: 6px 14px;\n"
 "}\n"
 "\n"
-"QLabel#lbl_status_comunicacao[state=\"on\"] {\n"
+"QLabel#lbl_status_comun"
+                        "icacao[state=\"on\"] {\n"
 "    color: #A78BFA;\n"
 "    border-color: rgba(167, 139, 250, 0.5);\n"
 "}\n"
 "\n"
-"QLabel#lbl_status_comunicacao[state=\""
-                        "off\"] {\n"
+"QLabel#lbl_status_comunicacao[state=\"off\"] {\n"
 "    color: #E1B8B4;\n"
 "    border-color: rgba(225, 184, 180, 0.4);\n"
 "}\n"
@@ -104,7 +112,8 @@ class Ui_MainWindow(object):
 "\n"
 "QLabel.metricUnit {\n"
 "    color: #6B5B7A;\n"
-"    font-size: 13px;\n"
+"    font-size: "
+                        "13px;\n"
 "    font-weight: 600;\n"
 "}\n"
 "\n"
@@ -113,8 +122,7 @@ class Ui_MainWindow(object):
 "    font-size: 11px;\n"
 "}\n"
 "\n"
-"/* ===== Pain\u00e9"
-                        "is gen\u00e9ricos ===== */\n"
+"/* ===== Pain\u00e9is gen\u00e9ricos ===== */\n"
 "QFrame.panel {\n"
 "    background-color: #FFFFFF;\n"
 "    border: 1px solid #DCD0E8;\n"
@@ -153,15 +161,15 @@ class Ui_MainWindow(object):
 "    font-weight: 700;\n"
 "}\n"
 "\n"
-"QLabel#lbl_status_disjuntor[estado=\"aberto\"] {\n"
+"QLabel#lbl_status_disjunt"
+                        "or[estado=\"aberto\"] {\n"
 "    color: #B42318;\n"
 "    font-size: 18px;\n"
 "    font-weight: 700;\n"
 "}\n"
 "\n"
 "QLabel#lbl_status_detalhe {\n"
-"    co"
-                        "lor: #6B5B7A;\n"
+"    color: #6B5B7A;\n"
 "    font-size: 11px;\n"
 "}\n"
 "\n"
@@ -195,8 +203,17 @@ class Ui_MainWindow(object):
 "    border: 1px solid #6D28D9;\n"
 "}\n"
 "\n"
+"QDoubleSpinBox::up-button,\n"
+"QDoubleSpinBox::down-button {\n"
+"    width: 0px;\n"
+"    height: 0px;\n"
+"    border: none;\n"
+"    background: transparent;\n"
+"}\n"
+"\n"
 "QPushButton {\n"
-"    background-color: #FFFFFF;\n"
+""
+                        "    background-color: #FFFFFF;\n"
 "    color: #1A1030;\n"
 "    border: 1px solid #D4C8E0;\n"
 "    border-radius: 7px;\n"
@@ -210,8 +227,7 @@ class Ui_MainWindow(object):
 "    border-color: #8B5CF6;\n"
 "}\n"
 "\n"
-"QPushBut"
-                        "ton#btn_configuracao,\n"
+"QPushButton#btn_configuracao,\n"
 "QPushButton#btn_comunicacao {\n"
 "    background-color: #3D1A6B;\n"
 "    color: #FFFFFF;\n"
@@ -240,7 +256,8 @@ class Ui_MainWindow(object):
 "    background: #9E1B15;\n"
 "}\n"
 "\n"
-"/* ===== Hist\u00f3rico ===== */\n"
+"/*"
+                        " ===== Hist\u00f3rico ===== */\n"
 "QFrame#historicoPanel {\n"
 "    background-color: #FFFFFF;\n"
 "    border: 1px solid #DCD0E8;\n"
@@ -251,8 +268,7 @@ class Ui_MainWindow(object):
 "    background-color: #FFFFFF;\n"
 "    border: none;\n"
 "    gridline-color: #EDE8F0;\n"
-"    selection-background-color: #DDD0E8"
-                        ";\n"
+"    selection-background-color: #DDD0E8;\n"
 "    selection-color: #1A1030;\n"
 "    alternate-background-color: #F8F4FA;\n"
 "}\n"
@@ -285,9 +301,9 @@ class Ui_MainWindow(object):
 "\n"
 "QScrollBar::handle:vertical:hover {\n"
 "    background: #8B5CF6;\n"
-"}\n"
+""
+                        "}\n"
 "   ")
-        # Aqui tem os títulos, subtítulos e status de comunicação ---------------------------------------
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.layout_principal = QVBoxLayout(self.centralwidget)
@@ -329,13 +345,10 @@ class Ui_MainWindow(object):
 
         self.layout_principal.addWidget(self.header)
 
-        # Aqui tem as métricas onde fica tensão, corrente e potência ---------------------------------------
         self.layout_metricas = QHBoxLayout()
         self.layout_metricas.setSpacing(10)
         self.layout_metricas.setObjectName(u"layout_metricas")
         self.grupo_tensao = QFrame(self.centralwidget)
-
-        # Tensão
         self.grupo_tensao.setObjectName(u"grupo_tensao")
         self.grupo_tensao.setMinimumSize(QSize(0, 105))
         self.layout_tensao = QVBoxLayout(self.grupo_tensao)
@@ -370,7 +383,6 @@ class Ui_MainWindow(object):
 
         self.layout_metricas.addWidget(self.grupo_tensao)
 
-        # Corrente
         self.grupo_corrente = QFrame(self.centralwidget)
         self.grupo_corrente.setObjectName(u"grupo_corrente")
         self.grupo_corrente.setMinimumSize(QSize(0, 105))
@@ -406,7 +418,6 @@ class Ui_MainWindow(object):
 
         self.layout_metricas.addWidget(self.grupo_corrente)
 
-        # Potência
         self.grupo_potencia = QFrame(self.centralwidget)
         self.grupo_potencia.setObjectName(u"grupo_potencia")
         self.grupo_potencia.setMinimumSize(QSize(0, 105))
@@ -445,13 +456,10 @@ class Ui_MainWindow(object):
 
         self.layout_principal.addLayout(self.layout_metricas)
 
-        # Aqui no monitoramento fica o gráfico e o status do disjuntor ----------------------------------
         self.layout_monitoramento = QHBoxLayout()
         self.layout_monitoramento.setSpacing(10)
         self.layout_monitoramento.setObjectName(u"layout_monitoramento")
         self.grupo_grafico = QFrame(self.centralwidget)
-
-        # Gráfico
         self.grupo_grafico.setObjectName(u"grupo_grafico")
         self.grupo_grafico.setMinimumSize(QSize(560, 280))
         self.layout_grafico = QVBoxLayout(self.grupo_grafico)
@@ -476,7 +484,6 @@ class Ui_MainWindow(object):
 
         self.layout_monitoramento.addWidget(self.grupo_grafico)
 
-        # Status do  disjuntor
         self.statusCard = QFrame(self.centralwidget)
         self.statusCard.setObjectName(u"statusCard")
         self.statusCard.setMinimumSize(QSize(280, 280))
@@ -521,7 +528,6 @@ class Ui_MainWindow(object):
 
         self.layout_principal.addLayout(self.layout_monitoramento)
 
-        # Aqui ficam os controles como limite de potência, config, comunicação e emergência -------------
         self.controlePanel = QFrame(self.centralwidget)
         self.controlePanel.setObjectName(u"controlePanel")
         self.layout_controles = QHBoxLayout(self.controlePanel)
@@ -535,7 +541,6 @@ class Ui_MainWindow(object):
 
         self.layout_limite.addWidget(self.lbl_limite_titulo)
 
-        # Limite de potência
         self.spin_limite_potencia = QDoubleSpinBox(self.controlePanel)
         self.spin_limite_potencia.setObjectName(u"spin_limite_potencia")
         self.spin_limite_potencia.setMinimum(0.000000000000000)
@@ -551,21 +556,18 @@ class Ui_MainWindow(object):
 
         self.layout_controles.addItem(self.spacer_controles)
 
-        # Configuração
         self.btn_configuracao = QPushButton(self.controlePanel)
         self.btn_configuracao.setObjectName(u"btn_configuracao")
         self.btn_configuracao.setMinimumSize(QSize(145, 36))
 
         self.layout_controles.addWidget(self.btn_configuracao)
 
-        # Comunicação
         self.btn_comunicacao = QPushButton(self.controlePanel)
         self.btn_comunicacao.setObjectName(u"btn_comunicacao")
         self.btn_comunicacao.setMinimumSize(QSize(145, 36))
 
         self.layout_controles.addWidget(self.btn_comunicacao)
 
-        # Corte de emergência
         self.btn_corte_emergencia = QPushButton(self.controlePanel)
         self.btn_corte_emergencia.setObjectName(u"btn_corte_emergencia")
         self.btn_corte_emergencia.setMinimumSize(QSize(200, 36))
@@ -575,7 +577,6 @@ class Ui_MainWindow(object):
 
         self.layout_principal.addWidget(self.controlePanel)
 
-        # Aqui fica tabela do histórico ---------------------------------------------------------------
         self.historicoPanel = QFrame(self.centralwidget)
         self.historicoPanel.setObjectName(u"historicoPanel")
         self.historicoPanel.setMinimumSize(QSize(0, 170))
@@ -587,7 +588,6 @@ class Ui_MainWindow(object):
 
         self.layout_historico.addWidget(self.lbl_historico_titulo)
 
-        # Tabela
         self.tabela_registros = QTableWidget(self.historicoPanel)
         if (self.tabela_registros.columnCount() < 4):
             self.tabela_registros.setColumnCount(4)
