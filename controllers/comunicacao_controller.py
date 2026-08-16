@@ -10,7 +10,6 @@ class ComunicacaoController(QWidget):
         self.ui = Ui_Form()
         self.ui.setupUi(self)
 
-        # Instancia ou recebe o model completo
         self.model = model if model else ComunicacaoModel()
 
         self.configurar_sinais()
@@ -24,7 +23,6 @@ class ComunicacaoController(QWidget):
     def carregar_portas_com(self):
         self.ui.combo_porta.clear()
         
-        # O Model realiza a varredura do hardware
         portas = self.model.listar_portas()
 
         if portas:
@@ -37,7 +35,6 @@ class ComunicacaoController(QWidget):
         baud_rate = self.ui.combo_baud.currentText()
         timeout = self.ui.spin_timeout.value()
 
-        # O Model processa a conexão
         sucesso = self.model.conectar(porta, baud_rate, timeout)
 
         if sucesso:
@@ -47,7 +44,6 @@ class ComunicacaoController(QWidget):
             self.ui.lbl_status.setText("Status : Erro - Nenhuma porta selecionada")
 
     def ao_desconectar(self):
-        # O Model executa o encerramento
         self.model.desconectar()
         
         self.ui.lbl_status.setText(self.model.obter_status())
@@ -55,7 +51,6 @@ class ComunicacaoController(QWidget):
         self.atualizar_interface()
 
     def atualizar_interface(self):
-        # O Controller apenas consulta o estado no Model
         conectado = self.model.is_connected
 
         self.ui.combo_porta.setEnabled(not conectado)
