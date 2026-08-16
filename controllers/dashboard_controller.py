@@ -1,6 +1,5 @@
 # Controle da supervisão do sistema
 
-import random # Simular valores do hardware
 from datetime import datetime, timedelta # data/hora e intervalo de tempo
 import pyqtgraph as pg # desenhar gráficos
 from PySide6.QtCore import QTimer # Executa função a cada certo período
@@ -8,6 +7,7 @@ from PySide6.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox # Base 
 from ui.Ui_dashboard import Ui_MainWindow # Interface criada pelo Qt Designer
 from models.medicao import Medicao # Medições
 from models.registro import Registro # Evento registrado no sistema
+from models.simulacao import Simulador
 
 # Classe principal
 class DashController(QMainWindow):
@@ -25,6 +25,8 @@ class DashController(QMainWindow):
             i=8.0,
             disjuntor=True # Fechado 
         )
+
+        self.simulador = Simulador()
 
         # Guarda as medições utilizadas no gráfico
         self.historico_potencia = []
@@ -96,8 +98,8 @@ class DashController(QMainWindow):
 
             if resposta == QMessageBox.StandardButton.Yes:
 
-                # Desliga o disjuntor
-                self.medicao_atual.disjuntor = False
+                # Atualiza o estado do disjuntor no simulador
+                self.simulador.alterar_disjuntor(False)
 
                 # Atualiza o estado do corte
                 self.corte_emergencia_ativo = True
@@ -127,8 +129,8 @@ class DashController(QMainWindow):
 
             if resposta == QMessageBox.StandardButton.Yes:
 
-                # Religa o disjuntor
-                self.medicao_atual.disjuntor = True
+                # Religa o estado do disjuntor no simulador
+                self.simulador.alterar_disjuntor(True)
 
                 # Atualiza o estado do corte
                 self.corte_emergencia_ativo = False
@@ -214,15 +216,11 @@ class DashController(QMainWindow):
                 hours=24 - (indice * 0.5)
             )
 
-            # Simula tensão e corrente aleatórias com base no disjuntor
-            if self.medicao_atual.disjuntor:
-                tensao = random.uniform(218.0, 222.0)
-                corrente = random.uniform(7.0, 10.0)
-            else:
-                tensao = 0.0
-                corrente = 0.0
-            # Calcula potência
-            potencia = tensao * corrente
+            # Gera uma nova medição simulada com base no estado atual do disjuntor
+            medicao = self.simulador.gerar_medicao()
+
+            # Obtém a potência calculada da medição simulada
+            potencia = medicao.potencia
 
             # Adiciona um dicionário na lista
             self.historico_potencia.append(
@@ -255,23 +253,9 @@ class DashController(QMainWindow):
     # Chegada de uma nova simulação
     def atualizar_medicao(self):
         # Simula uma nova medição recebida, como se fosse um hardware
-        # Simula tensão e corrente
 
-        # Simula tensão e corrente com base no estado do disjuntor
-        if self.medicao_atual.disjuntor:
-            tensao = random.uniform(218.0, 222.0)
-            corrente = random.uniform(7.0, 10.0)
-        else:
-            tensao = 0.0
-            corrente = 0.0
-
-        # Cria uma nova medição
-        # Mantém o estado atual do disjuntor
-        self.medicao_atual = Medicao(
-            v=tensao,
-            i=corrente,
-            disjuntor=self.medicao_atual.disjuntor # O disjuntor agora pode ser alterado entre fechado e aberto
-        )
+        # Gera uma nova medição simulada
+        self.medicao_atual = self.simulador.gerar_medicao()
 
         # Adiciona a nova potência ao histórico
         self.historico_potencia.append(
@@ -281,7 +265,7 @@ class DashController(QMainWindow):
             }
         )
 
-        # Limita a quantidade de pontos armazenados, se passar (1001) ele remove o 1° e assim por diante
+        # Limita a quantidade de pontos armazenados
         if len(self.historico_potencia) > 1000:
             self.historico_potencia.pop(0)
 
