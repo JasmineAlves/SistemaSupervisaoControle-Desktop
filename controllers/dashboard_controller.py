@@ -1,12 +1,7 @@
 # Controle da supervisão do sistema
 
-from models.medicao import Medicao
-from models.configuracao import Configuracao
-from models.evento import Evento
+from PySide6.QtWidgets import QMainWindow
 
-
-class SupervisaoController:
-    def __init__(self, configuracao):
-        self.configuracao = configuracao
-        self.medicao_atual = None
-        self.eventos = []
+class DashController(QMainWindow):
+    def __init__(self):
+        super().__init__()

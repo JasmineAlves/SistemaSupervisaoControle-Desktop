@@ -1,0 +1,1 @@
+# Controle da comunicação com o hardware
