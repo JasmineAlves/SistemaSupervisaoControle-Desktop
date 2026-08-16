@@ -1,27 +1,29 @@
 # Controle da supervisão do sistema
 
-import random
-from datetime import datetime, timedelta
-import pyqtgraph as pg
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QMainWindow, QTableWidgetItem
-from ui.Ui_dashboard import Ui_MainWindow
-from models.medicao import Medicao
-from models.registro import Registro
+import random # Simular valores do hardware
+from datetime import datetime, timedelta # data/hora e intervalo de tempo
+import pyqtgraph as pg # desenhar gráficos
+from PySide6.QtCore import QTimer # Executa função a cada certo período
+from PySide6.QtWidgets import QMainWindow, QTableWidgetItem # Base da janela principal e texto dentro das células da tabela
+from ui.Ui_dashboard import Ui_MainWindow # Interface criada pelo Qt Designer
+from models.medicao import Medicao # Medições
+from models.registro import Registro # Evento registrado no sistema
 
-
+# Classe principal
 class DashController(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
+        # Carregando a interface
+        self.ui = Ui_MainWindow() # Objeto que representa a interface
+        self.ui.setupUi(self) # Coloca a interface dentro da janela
+        # Passa a ter acesso aos componentes
 
         # Faz a simulação de uma medição inicial
         self.medicao_atual = Medicao(
             v=220.0,
             i=8.0,
-            disjuntor=True
+            disjuntor=True # Fechado 
         )
 
         # Guarda as medições utilizadas no gráfico
@@ -34,25 +36,26 @@ class DashController(QMainWindow):
         self.disjuntor_anterior = self.medicao_atual.disjuntor
 
         # Guarda se o limite de potência já foi ultrapassado
+        # Se a potência estava anteriormente acima do limite, evita registrar alerta a cada segundo
         self.limite_ultrapassado = False
 
-        # Configura o gráfico
+        # Configura o gráfico, chama a função que cria o gráfico
         self.configurar_grafico()
 
-        # Carrega dados iniciais para o gráfico
+        # Carrega dados iniciais para o gráfico, cria dados simulados
         self.carregar_historico_inicial()
 
-        # Configura a tabela de registros
+        # Configura a tabela de registros, define tamanho das colunas
         self.configurar_tabela()
 
-        # Registra a inicialização do sistema
+        # Registra a inicialização do sistema, adiciona primeiro registro
         self.adicionar_registro(
             tipo="Status",
             descricao="Sistema de supervisão iniciado.",
             valor=self.formatar_medicao()
         )
 
-        # Temporizador que atualiza periodicamente
+        # Temporizador que atualiza periodicamente, timer dispara a função atualizar_medicao() é executada
         self.timer = QTimer()
 
         self.timer.timeout.connect(
@@ -65,6 +68,7 @@ class DashController(QMainWindow):
         # Att a telemetria a cada 1s
         self.timer.start(1000)
 
+    # Cria e configura gráfico
     def configurar_grafico(self):
         # Cria o gráfico de demanda de potência
 
@@ -122,26 +126,28 @@ class DashController(QMainWindow):
 
         agora = datetime.now()
 
-        quantidade_pontos = 48
+        quantidade_pontos = 48 # 24horas / 48pontos = 0,5 hora cada ponto
 
         for indice in range(quantidade_pontos):
-
+            # Horário de cada ponto distribuido
             momento = agora - timedelta(
                 hours=24 - (indice * 0.5)
             )
 
+            # Simula tensão aleatória
             tensao = random.uniform(
                 218.0,
                 222.0
             )
-
+            # Simula corrente aleatória
             corrente = random.uniform(
                 5.0,
                 10.0
             )
-
+            # Calcula potência
             potencia = tensao * corrente
 
+            # Adiciona um dicionário na lista
             self.historico_potencia.append(
                 {
                     "timestamp": momento,
@@ -154,7 +160,7 @@ class DashController(QMainWindow):
 
     def atualizar_grafico(self):
         # Att a curva de demanda de potência
-
+        # Pega o histórico e transforma em dados para o gráfico
         valores = [
             item["potencia"]
             for item in self.historico_potencia
@@ -163,14 +169,16 @@ class DashController(QMainWindow):
         tempos = list(
             range(len(valores))
         )
-
+        # Desenha o gráfico usando esses pontos
         self.curva_potencia.setData(
             tempos,
             valores
         )
 
+    # Chegada de uma nova simulação
     def atualizar_medicao(self):
         # Simula uma nova medição recebida, como se fosse um hardware
+        # Simula tensão e corrente
 
         tensao = random.uniform(
             218.0,
@@ -181,11 +189,11 @@ class DashController(QMainWindow):
             7.0,
             10.0
         )
-
+        # Cria uma nova medição
         self.medicao_atual = Medicao(
             v=tensao,
             i=corrente,
-            disjuntor=True
+            disjuntor=True # Nesse código o disjuntor está sempre fechado
         )
 
         # Adiciona a nova potência ao histórico
@@ -196,22 +204,23 @@ class DashController(QMainWindow):
             }
         )
 
-        # Limita a quantidade de pontos armazenados
+        # Limita a quantidade de pontos armazenados, se passar (1001) ele remove o 1° e assim por diante
         if len(self.historico_potencia) > 1000:
             self.historico_potencia.pop(0)
 
         # Verifica se aconteceu algum evento
         self.verificar_eventos()
 
-        # Att os dados da interface
+        # Atualiza os dados da interface
         self.atualizar_dashboard()
 
-        # Att o gráfico
+        # Atualiza o gráfico
         self.atualizar_grafico()
 
     def atualizar_dashboard(self):
         # Exibe na interface oq veio da medição
-
+        
+        # Coloca os valores na interface, tensão, corrente, potência e estado disjuntor
         medicao = self.medicao_atual
 
         # Att tensão
@@ -229,9 +238,9 @@ class DashController(QMainWindow):
             f"{medicao.potencia:.1f}"
         )
 
-        # Att estado do disjuntor
-        if medicao.disjuntor:
-            self.ui.lbl_status_disjuntor.setText(
+        # Atualiza estado do disjuntor
+        if medicao.disjuntor: # Se True
+            self.ui.lbl_status_disjuntor.setText( 
                 "●  FECHADO / NORMAL"
             )
 
@@ -239,7 +248,7 @@ class DashController(QMainWindow):
                 "Instalação energizada e proteção disponível."
             )
 
-        else:
+        else: # Se False
             self.ui.lbl_status_disjuntor.setText(
                 "●  ABERTO / PROTEÇÃO ATIVADA"
             )
@@ -248,7 +257,7 @@ class DashController(QMainWindow):
                 "A instalação encontra-se desenergizada."
             )
 
-        # Att o horário da última medição
+        # Atualiza o horário da última medição
         horario = medicao.timestamp.strftime(
             "%H:%M:%S"
         )
