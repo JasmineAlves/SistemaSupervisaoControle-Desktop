@@ -2,7 +2,6 @@ import sys
 from PySide6.QtWidgets import QApplication
 from controllers.dashboard_controller import DashController
 
-
 def main():
     app = QApplication(sys.argv)
 

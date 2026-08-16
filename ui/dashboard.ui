@@ -6,25 +6,958 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>600</height>
+    <width>1280</width>
+    <height>894</height>
    </rect>
   </property>
-  <property name="windowTitle">
-   <string>MainWindow</string>
+  <property name="minimumSize">
+   <size>
+    <width>980</width>
+    <height>680</height>
+   </size>
   </property>
-  <widget class="QWidget" name="centralwidget"/>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>800</width>
-     <height>23</height>
-    </rect>
-   </property>
+  <property name="windowTitle">
+   <string>Supervisão de Energia</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+/* ===== Base ===== */
+QMainWindow {
+    background-color: #F4F0F8;
+}
+
+QWidget {
+    font-family: &quot;Segoe UI&quot;;
+    color: #1A1030;
+}
+
+/* ===== Cabeçalho ===== */
+QFrame#header {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1A0A30, stop:1 #3D1A6B);
+    border-radius: 14px;
+}
+
+QLabel#lbl_titulo {
+    color: #FFFFFF;
+    font-size: 25px;
+    font-weight: 700;
+}
+
+QLabel#lbl_subtitulo {
+    color: #B8A0D4;
+    font-size: 12px;
+}
+
+QLabel#lbl_status_comunicacao {
+    color: #B8A0D4;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(184, 160, 212, 0.35);
+    border-radius: 12px;
+    padding: 6px 14px;
+}
+
+QLabel#lbl_status_comunicacao[state=&quot;on&quot;] {
+    color: #A78BFA;
+    border-color: rgba(167, 139, 250, 0.5);
+}
+
+QLabel#lbl_status_comunicacao[state=&quot;off&quot;] {
+    color: #E1B8B4;
+    border-color: rgba(225, 184, 180, 0.4);
+}
+
+/* ===== Cards de métrica ===== */
+QFrame.metricCard {
+    background-color: #FFFFFF;
+    border: 1px solid #DCD0E8;
+    border-radius: 12px;
+}
+
+QFrame#grupo_tensao { border-left: 4px solid #6D28D9; }
+QFrame#grupo_corrente { border-left: 4px solid #7C3AED; }
+QFrame#grupo_potencia { border-left: 4px solid #8B5CF6; }
+QFrame#grupo_potencia[alerta=&quot;true&quot;] { border-left: 4px solid #EA580C; background: #FFF7ED; }
+
+QLabel.metricTitle {
+    color: #6B5B7A;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+QLabel.metricValue {
+    color: #1A1030;
+    font-size: 29px;
+    font-weight: 700;
+}
+
+QLabel.metricUnit {
+    color: #6B5B7A;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QLabel.metricFooter {
+    color: #8B7A9A;
+    font-size: 11px;
+}
+
+/* ===== Painéis genéricos ===== */
+QFrame.panel {
+    background-color: #FFFFFF;
+    border: 1px solid #DCD0E8;
+    border-radius: 12px;
+}
+
+QLabel.panelTitle {
+    color: #1A1030;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QLabel.panelSubtitle {
+    color: #8B7A9A;
+    font-size: 11px;
+}
+
+/* ===== Card de status do disjuntor ===== */
+QFrame#statusCard {
+    border-radius: 12px;
+}
+
+QFrame#statusCard[estado=&quot;fechado&quot;] {
+    background: #F0ECF5;
+    border: 1px solid #D4C8E0;
+}
+
+QFrame#statusCard[estado=&quot;aberto&quot;] {
+    background: #FDECEC;
+    border: 1px solid #F3C1BC;
+}
+
+QLabel#lbl_status_disjuntor[estado=&quot;fechado&quot;] {
+    color: #5B21B6;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel#lbl_status_disjuntor[estado=&quot;aberto&quot;] {
+    color: #B42318;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel#lbl_status_detalhe {
+    color: #6B5B7A;
+    font-size: 11px;
+}
+
+QLabel#lbl_status_atualizacao {
+    color: #8B7A9A;
+    font-size: 10px;
+}
+
+/* ===== Controles ===== */
+QFrame#controlePanel {
+    background-color: #F0ECF5;
+    border: 1px solid #DCD0E8;
+    border-radius: 12px;
+}
+
+QLabel.controlTitle {
+    color: #6B5B7A;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QDoubleSpinBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D4C8E0;
+    border-radius: 7px;
+    padding: 6px 8px;
+    min-height: 28px;
+}
+
+QDoubleSpinBox:focus {
+    border: 1px solid #6D28D9;
+}
+
+QPushButton {
+    background-color: #FFFFFF;
+    color: #1A1030;
+    border: 1px solid #D4C8E0;
+    border-radius: 7px;
+    padding: 9px 14px;
+    font-weight: 600;
+    min-height: 18px;
+}
+
+QPushButton:hover {
+    background-color: #F0ECF5;
+    border-color: #8B5CF6;
+}
+
+QPushButton#btn_configuracao,
+QPushButton#btn_comunicacao {
+    background-color: #3D1A6B;
+    color: #FFFFFF;
+    border: none;
+}
+
+QPushButton#btn_configuracao:hover,
+QPushButton#btn_comunicacao:hover {
+    background-color: #4D2A7B;
+}
+
+QPushButton#btn_corte_emergencia {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #E23B32, stop:1 #B91C1C);
+    color: #FFFFFF;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QPushButton#btn_corte_emergencia:hover {
+    background: #C0271F;
+}
+
+QPushButton#btn_corte_emergencia:pressed {
+    background: #9E1B15;
+}
+
+/* ===== Histórico ===== */
+QFrame#historicoPanel {
+    background-color: #FFFFFF;
+    border: 1px solid #DCD0E8;
+    border-radius: 12px;
+}
+
+QTableWidget {
+    background-color: #FFFFFF;
+    border: none;
+    gridline-color: #EDE8F0;
+    selection-background-color: #DDD0E8;
+    selection-color: #1A1030;
+    alternate-background-color: #F8F4FA;
+}
+
+QHeaderView::section {
+    background-color: #F0ECF5;
+    color: #6B5B7A;
+    border: none;
+    border-bottom: 1px solid #DCD0E8;
+    padding: 8px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QStatusBar {
+    background-color: #EDE8F0;
+    color: #6B5B7A;
+}
+
+QScrollBar:vertical {
+    width: 7px;
+    background: transparent;
+}
+
+QScrollBar::handle:vertical {
+    background: #D4C8E0;
+    border-radius: 3px;
+    min-height: 25px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #8B5CF6;
+}
+   </string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="layout_principal">
+    <property name="spacing">
+     <number>12</number>
+    </property>
+    <property name="leftMargin">
+     <number>20</number>
+    </property>
+    <property name="topMargin">
+     <number>16</number>
+    </property>
+    <property name="rightMargin">
+     <number>20</number>
+    </property>
+    <property name="bottomMargin">
+     <number>12</number>
+    </property>
+    <item>
+     <widget class="QFrame" name="header">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>78</height>
+       </size>
+      </property>
+      <layout class="QHBoxLayout" name="layout_header">
+       <property name="leftMargin">
+        <number>20</number>
+       </property>
+       <property name="rightMargin">
+        <number>20</number>
+       </property>
+       <item>
+        <layout class="QVBoxLayout" name="layout_header_text">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_titulo">
+           <property name="text">
+            <string>Supervisão de Energia</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="lbl_subtitulo">
+           <property name="text">
+            <string>Monitor de Consumo e Qualidade de Energia - Smart Grid</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <spacer name="spacer_header">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_status_comunicacao">
+         <property name="text">
+          <string>Comunicação: DESCONECTADO</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="layout_metricas">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="grupo_tensao">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>105</height>
+         </size>
+        </property>
+        <property name="class" stdset="0">
+         <string>metricCard</string>
+        </property>
+        <layout class="QVBoxLayout" name="layout_tensao">
+         <property name="leftMargin">
+          <number>16</number>
+         </property>
+         <property name="topMargin">
+          <number>14</number>
+         </property>
+         <property name="rightMargin">
+          <number>16</number>
+         </property>
+         <property name="bottomMargin">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_tensao_titulo">
+           <property name="text">
+            <string>TENSÃO RMS</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>metricTitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="layout_tensao_valor">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="lbl_valor_tensao">
+             <property name="text">
+              <string>0.0</string>
+             </property>
+             <property name="class" stdset="0">
+              <string>metricValue</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_tensao_unidade">
+             <property name="text">
+              <string>V</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignBottom</set>
+             </property>
+             <property name="class" stdset="0">
+              <string>metricUnit</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="spacer_tensao">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>10</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="grupo_corrente">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>105</height>
+         </size>
+        </property>
+        <property name="class" stdset="0">
+         <string>metricCard</string>
+        </property>
+        <layout class="QVBoxLayout" name="layout_corrente">
+         <property name="leftMargin">
+          <number>16</number>
+         </property>
+         <property name="topMargin">
+          <number>14</number>
+         </property>
+         <property name="rightMargin">
+          <number>16</number>
+         </property>
+         <property name="bottomMargin">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_corrente_titulo">
+           <property name="text">
+            <string>CORRENTE RMS</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>metricTitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="layout_corrente_valor">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="lbl_valor_corrente">
+             <property name="text">
+              <string>0.0</string>
+             </property>
+             <property name="class" stdset="0">
+              <string>metricValue</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_corrente_unidade">
+             <property name="text">
+              <string>A</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignBottom</set>
+             </property>
+             <property name="class" stdset="0">
+              <string>metricUnit</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="spacer_corrente">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>10</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="grupo_potencia">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>105</height>
+         </size>
+        </property>
+        <property name="class" stdset="0">
+         <string>metricCard</string>
+        </property>
+        <property name="alerta" stdset="0">
+         <string>false</string>
+        </property>
+        <layout class="QVBoxLayout" name="layout_potencia">
+         <property name="leftMargin">
+          <number>16</number>
+         </property>
+         <property name="topMargin">
+          <number>14</number>
+         </property>
+         <property name="rightMargin">
+          <number>16</number>
+         </property>
+         <property name="bottomMargin">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_potencia_titulo">
+           <property name="text">
+            <string>POTÊNCIA ATIVA </string>
+           </property>
+           <property name="class" stdset="0">
+            <string>metricTitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="layout_potencia_valor">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="lbl_valor_potencia">
+             <property name="text">
+              <string>0.0</string>
+             </property>
+             <property name="class" stdset="0">
+              <string>metricValue</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_potencia_unidade">
+             <property name="text">
+              <string>W</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignBottom</set>
+             </property>
+             <property name="class" stdset="0">
+              <string>metricUnit</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="spacer_potencia">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>10</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="layout_monitoramento">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="grupo_grafico">
+        <property name="minimumSize">
+         <size>
+          <width>560</width>
+          <height>280</height>
+         </size>
+        </property>
+        <property name="class" stdset="0">
+         <string>panel</string>
+        </property>
+        <layout class="QVBoxLayout" name="layout_grafico">
+         <property name="leftMargin">
+          <number>16</number>
+         </property>
+         <property name="topMargin">
+          <number>14</number>
+         </property>
+         <property name="rightMargin">
+          <number>16</number>
+         </property>
+         <property name="bottomMargin">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_grafico_titulo">
+           <property name="text">
+            <string>Curva de demanda de potência</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>panelTitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="lbl_grafico_subtitulo">
+           <property name="text">
+            <string>Últimas 24 horas · histórico pré-carregado</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>panelSubtitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="widget_grafico" native="true">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>190</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="statusCard">
+        <property name="minimumSize">
+         <size>
+          <width>280</width>
+          <height>280</height>
+         </size>
+        </property>
+        <property name="estado" stdset="0">
+         <string>fechado</string>
+        </property>
+        <layout class="QVBoxLayout" name="layout_status">
+         <property name="leftMargin">
+          <number>18</number>
+         </property>
+         <property name="topMargin">
+          <number>14</number>
+         </property>
+         <property name="rightMargin">
+          <number>18</number>
+         </property>
+         <property name="bottomMargin">
+          <number>14</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_disjuntor_titulo">
+           <property name="text">
+            <string>Proteção geral</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>panelTitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="spacer_status_1">
+           <property name="orientation">
+            <enum>Qt::Orientation::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="lbl_status_disjuntor">
+           <property name="text">
+            <string>DISJUNTOR: FECHADO</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignmentFlag::AlignCenter</set>
+           </property>
+           <property name="estado" stdset="0">
+            <string>fechado</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="lbl_status_detalhe">
+           <property name="text">
+            <string>Instalação energizada. Proteção monitorada em tempo real.</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignmentFlag::AlignCenter</set>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="spacer_status_2">
+           <property name="orientation">
+            <enum>Qt::Orientation::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="lbl_status_atualizacao">
+           <property name="text">
+            <string>Última atualização: --:--:--</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignmentFlag::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QFrame" name="controlePanel">
+      <layout class="QHBoxLayout" name="layout_controles">
+       <property name="leftMargin">
+        <number>14</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>14</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <item>
+        <layout class="QVBoxLayout" name="layout_limite">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_limite_titulo">
+           <property name="text">
+            <string>LIMITE DE ALERTA DE POTÊNCIA</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>controlTitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QDoubleSpinBox" name="spin_limite_potencia">
+           <property name="suffix">
+            <string> W</string>
+           </property>
+           <property name="minimum">
+            <double>0.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>999999.000000000000000</double>
+           </property>
+           <property name="value">
+            <double>2000.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <spacer name="spacer_controles">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>30</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_configuracao">
+         <property name="minimumSize">
+          <size>
+           <width>145</width>
+           <height>36</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>CONFIGURAÇÕES</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_comunicacao">
+         <property name="minimumSize">
+          <size>
+           <width>145</width>
+           <height>36</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>COMUNICAÇÃO</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_corte_emergencia">
+         <property name="minimumSize">
+          <size>
+           <width>200</width>
+           <height>36</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>⚠  CORTE DE EMERGÊNCIA</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QFrame" name="historicoPanel">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>170</height>
+       </size>
+      </property>
+      <layout class="QVBoxLayout" name="layout_historico">
+       <property name="leftMargin">
+        <number>14</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>14</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lbl_historico_titulo">
+         <property name="text">
+          <string>Histórico de eventos e auditoria</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>panelTitle</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="tabela_registros">
+         <property name="editTriggers">
+          <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+         </property>
+         <property name="alternatingRowColors">
+          <bool>true</bool>
+         </property>
+         <property name="selectionBehavior">
+          <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
+         </property>
+         <property name="sortingEnabled">
+          <bool>true</bool>
+         </property>
+         <property name="rowCount">
+          <number>0</number>
+         </property>
+         <property name="columnCount">
+          <number>4</number>
+         </property>
+         <attribute name="horizontalHeaderDefaultSectionSize">
+          <number>150</number>
+         </attribute>
+         <attribute name="horizontalHeaderStretchLastSection">
+          <bool>true</bool>
+         </attribute>
+         <attribute name="verticalHeaderVisible">
+          <bool>false</bool>
+         </attribute>
+         <column>
+          <property name="text">
+           <string>Data / Hora</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Tipo de Evento</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Valor Medido</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Descrição</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
   </widget>
-  <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources/>
  <connections/>
