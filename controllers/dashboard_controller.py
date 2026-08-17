@@ -32,6 +32,9 @@ class DashController(QMainWindow):
         # Guarda as medições utilizadas no gráfico
         self.historico_potencia = []
 
+        # Controla se o gráfico acompanha em tempo real a última medição
+        self.modo_tempo_real = False
+
         # Guarda os registros de eventos do sistema
         self.registros = []
 
@@ -73,6 +76,10 @@ class DashController(QMainWindow):
         self.corte_emergencia_ativo = False
         # Controla o corte de emergência
         self.ui.btn_corte_emergencia.clicked.connect(self.alternar_corte_emergencia)
+
+        self.ui.btn_tempo_real.clicked.connect(
+            self.alternar_tempo_real
+        )
 
         # Guarda o limite anterior para registrar alterações
         self.limite_anterior = self.ui.spin_limite_potencia.value()
@@ -161,7 +168,7 @@ class DashController(QMainWindow):
                 # Altera o texto do botão
                 self.ui.btn_corte_emergencia.setText(
                     "⚠  CORTE DE EMERGÊNCIA"
-                )    
+                ) 
 
     # Cria e configura gráfico
     def configurar_grafico(self):
@@ -172,7 +179,7 @@ class DashController(QMainWindow):
         self.grafico.setBackground("w")
 
         self.grafico.setTitle(
-            "Demanda de potência",
+            "Demanda de potência - Últimas 24 horas",
             color="#24343B",
             size="12pt"
         )
@@ -185,7 +192,7 @@ class DashController(QMainWindow):
 
         self.grafico.setLabel(
             "bottom",
-            "Tempo"
+            "Horário"
         )
 
         self.grafico.showGrid(
@@ -207,6 +214,15 @@ class DashController(QMainWindow):
             )
 
         layout.addWidget(self.grafico)
+
+        # Cria o eixo horizontal usando data e hora
+        eixo_tempo = pg.DateAxisItem(
+            orientation="bottom"
+        )
+
+        self.grafico.setAxisItems({
+            "bottom": eixo_tempo
+        })
 
         # Cria a curva de potência
         self.curva_potencia = self.grafico.plot(
@@ -243,25 +259,90 @@ class DashController(QMainWindow):
                 }
             )
 
+
+        agora = datetime.now()
+        inicio = agora - timedelta(hours=24)
+
+        self.grafico.setXRange(
+            inicio.timestamp(),
+            agora.timestamp(),
+            padding=0
+        )
         # Att o gráfico com os dados iniciais
         self.atualizar_grafico()
 
     def atualizar_grafico(self):
-        # Att a curva de demanda de potência
-        # Pega o histórico e transforma em dados para o gráfico
+        # Atualiza a curva de demanda de potência
+
+        if not self.historico_potencia:
+            return
+
+        # Pega os valores de potência
         valores = [
             item["potencia"]
             for item in self.historico_potencia
         ]
 
-        tempos = list(
-            range(len(valores))
-        )
-        # Desenha o gráfico usando esses pontos
+        # Pega os horários das medições
+        tempos = [
+            item["timestamp"].timestamp()
+            for item in self.historico_potencia
+        ]
+
+        # Atualiza os dados da curva
         self.curva_potencia.setData(
             tempos,
             valores
         )
+
+        # tempo real
+        if self.modo_tempo_real:
+
+            ultimo_tempo = tempos[-1]
+
+            # Mostra os últimos 60 segundos
+            inicio = ultimo_tempo - 60
+
+            self.grafico.setXRange(
+                inicio,
+                ultimo_tempo,
+                padding=0
+            )
+
+        # 24 horas
+        else:
+
+            agora = datetime.now()
+
+            inicio = agora - timedelta(hours=24)
+
+            self.grafico.setXRange(
+                inicio.timestamp(),
+                agora.timestamp(),
+                padding=0
+            )
+
+        '''
+        # Mantém o gráfico mostrando as últimas 24 horas
+        agora = datetime.now()
+        inicio = agora - timedelta(hours=24)
+
+        self.grafico.setXRange(
+            inicio.timestamp(),
+            agora.timestamp(),
+            padding=0
+        )
+        '''
+
+    def alternar_tempo_real(self):
+        self.modo_tempo_real = not self.modo_tempo_real
+
+        if self.modo_tempo_real:
+            self.ui.btn_tempo_real.setText("Tempo Real")
+            # Volta imediatamente para a última medição
+            self.atualizar_grafico()
+        else:
+            self.ui.btn_tempo_real.setText("24 Horas")
 
     # Chegada de uma nova simulação
     def atualizar_medicao(self):
@@ -278,12 +359,16 @@ class DashController(QMainWindow):
             }
         )
 
-        # Limita a quantidade de pontos armazenados
-        if len(self.historico_potencia) > 1000:
-            self.historico_potencia.pop(0)
+        # Mantém somente as medições das últimas 24h
+        limite = datetime.now() - timedelta(hours=24)
+
+        self.historico_potencia = [
+            item
+            for item in self.historico_potencia
+            if item["timestamp"] >= limite
+        ]
 
         # Verifica se aconteceu algum evento
-        self.verificar_eventos()
 
         # Atualiza os dados da interface
         self.atualizar_dashboard()
@@ -321,6 +406,8 @@ class DashController(QMainWindow):
             self.ui.lbl_status_detalhe.setText(
                 "Instalação energizada e proteção disponível."
             )
+            estado = "fechado"
+
 
         else: # Se False
             self.ui.lbl_status_disjuntor.setText(
@@ -330,6 +417,15 @@ class DashController(QMainWindow):
             self.ui.lbl_status_detalhe.setText(
                 "A instalação encontra-se desenergizada."
             )
+            estado = "aberto"
+
+        # Atualiza cor e card de texto
+        self.ui.statusCard.setProperty("estado", estado)
+        self.ui.lbl_status_disjuntor.setProperty("estado", estado)
+
+        for widget in (self.ui.statusCard, self.ui.lbl_status_disjuntor):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
 
         # Atualiza o horário da última medição
         horario = medicao.timestamp.strftime(

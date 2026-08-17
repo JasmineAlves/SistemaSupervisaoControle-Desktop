@@ -21,7 +21,6 @@
   </property>
   <property name="styleSheet">
    <string notr="true">
-/* ===== Base ===== */
 QMainWindow {
     background-color: #F4F0F8;
 }
@@ -32,15 +31,64 @@ QWidget {
 }
 
 QMessageBox {
-    background-color: #3D1A6B;
-    color: #ffffff;
+    background-color: #F4F0F8;
+    color: #1A1030;
+    font-family: "Segoe UI";
+    font-size: 12px;
 }
 
 QMessageBox QLabel {
-    color: #ffffff;
+    background-color: transparent;
+    color: #6B5B7A;
+    font-family: "Segoe UI";
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px;
 }
 
-/* ===== Cabeçalho ===== */
+QMessageBox QLabel#qt_msgboxex_icon_label {
+    background-color: transparent;
+    padding: 8px;
+}
+
+QMessageBox QPushButton {
+    background-color: #FFFFFF;
+    color: #1A1030;
+    border: 1px solid #D4C8E0;
+    border-radius: 7px;
+    padding: 8px 18px;
+    min-width: 90px;
+    min-height: 32px;
+    font-family: "Segoe UI";
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #F0ECF5;
+    border-color: #8B5CF6;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #DDD0E8;
+}
+
+QMessageBox QPushButton:default {
+    background-color: #3D1A6B;
+    color: #FFFFFF;
+    border: 1px solid #3D1A6B;
+}
+
+QMessageBox QPushButton:default:hover {
+    background-color: #4D2A7B;
+    border-color: #4D2A7B;
+}
+
+QMessageBox QPushButton:default:pressed {
+    background-color: #31124F;
+    border-color: #31124F;
+}
+
 QFrame#header {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #1A0A30, stop:1 #3D1A6B);
@@ -78,7 +126,6 @@ QLabel#lbl_status_comunicacao[state=&quot;off&quot;] {
     border-color: rgba(225, 184, 180, 0.4);
 }
 
-/* ===== Cards de métrica ===== */
 QFrame.metricCard {
     background-color: #FFFFFF;
     border: 1px solid #DCD0E8;
@@ -114,7 +161,6 @@ QLabel.metricFooter {
     font-size: 11px;
 }
 
-/* ===== Painéis genéricos ===== */
 QFrame.panel {
     background-color: #FFFFFF;
     border: 1px solid #DCD0E8;
@@ -132,7 +178,6 @@ QLabel.panelSubtitle {
     font-size: 11px;
 }
 
-/* ===== Card de status do disjuntor ===== */
 QFrame#statusCard {
     border-radius: 12px;
 }
@@ -169,7 +214,6 @@ QLabel#lbl_status_atualizacao {
     font-size: 10px;
 }
 
-/* ===== Controles ===== */
 QFrame#controlePanel {
     background-color: #F0ECF5;
     border: 1px solid #DCD0E8;
@@ -246,7 +290,6 @@ QPushButton#btn_corte_emergencia:pressed {
     background: #9E1B15;
 }
 
-/* ===== Histórico ===== */
 QFrame#historicoPanel {
     background-color: #FFFFFF;
     border: 1px solid #DCD0E8;
@@ -651,26 +694,82 @@ QScrollBar::handle:vertical:hover {
          <property name="bottomMargin">
           <number>12</number>
          </property>
-         <item>
-          <widget class="QLabel" name="lbl_grafico_titulo">
-           <property name="text">
-            <string>Curva de demanda de potência</string>
-           </property>
-           <property name="class" stdset="0">
-            <string>panelTitle</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="lbl_grafico_subtitulo">
-           <property name="text">
-            <string>Últimas 24 horas · histórico pré-carregado</string>
-           </property>
-           <property name="class" stdset="0">
-            <string>panelSubtitle</string>
-           </property>
-          </widget>
-         </item>
+<item>
+ <layout class="QHBoxLayout" name="layout_cabecalho_grafico">
+
+  <property name="spacing">
+   <number>10</number>
+  </property>
+
+  <!-- Título e subtítulo -->
+  <item>
+   <layout class="QVBoxLayout" name="layout_titulo_grafico">
+
+    <property name="spacing">
+     <number>2</number>
+    </property>
+
+    <item>
+     <widget class="QLabel" name="lbl_grafico_titulo">
+      <property name="text">
+       <string>Curva de demanda de potência</string>
+      </property>
+      <property name="class" stdset="0">
+       <string>panelTitle</string>
+      </property>
+     </widget>
+    </item>
+
+    <item>
+     <widget class="QLabel" name="lbl_grafico_subtitulo">
+      <property name="text">
+       <string>Últimas 24 horas · histórico pré-carregado</string>
+      </property>
+      <property name="class" stdset="0">
+       <string>panelSubtitle</string>
+      </property>
+     </widget>
+    </item>
+
+   </layout>
+  </item>
+
+  <!-- Empurra o botão para a direita -->
+  <item>
+   <spacer name="spacer_cabecalho_grafico">
+    <property name="orientation">
+     <enum>Qt::Orientation::Horizontal</enum>
+    </property>
+
+    <property name="sizeHint" stdset="0">
+     <size>
+      <width>20</width>
+      <height>20</height>
+     </size>
+    </property>
+   </spacer>
+  </item>
+
+  <!-- Botão de tempo real -->
+  <item>
+   <widget class="QPushButton" name="btn_tempo_real">
+
+    <property name="minimumSize">
+     <size>
+      <width>130</width>
+      <height>34</height>
+     </size>
+    </property>
+
+    <property name="text">
+     <string>Tempo Real</string>
+    </property>
+
+   </widget>
+  </item>
+
+ </layout>
+</item>
          <item>
           <widget class="QWidget" name="widget_grafico" native="true">
            <property name="minimumSize">

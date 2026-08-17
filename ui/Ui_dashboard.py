@@ -27,7 +27,6 @@ class Ui_MainWindow(object):
         MainWindow.resize(1280, 894)
         MainWindow.setMinimumSize(QSize(980, 680))
         MainWindow.setStyleSheet(u"\n"
-"/* ===== Base ===== */\n"
 "QMainWindow {\n"
 "    background-color: #F4F0F8;\n"
 "}\n"
@@ -38,15 +37,65 @@ class Ui_MainWindow(object):
 "}\n"
 "\n"
 "QMessageBox {\n"
-"    background-color: #3D1A6B;\n"
-"    color: #ffffff;\n"
+"    background-color: #F4F0F8;\n"
+"    color: #1A1030;\n"
+"    font-family: \"Segoe UI\";\n"
+"    font-size: 12px;\n"
 "}\n"
 "\n"
 "QMessageBox QLabel {\n"
-"    color: #ffffff;\n"
+"    background-color: transparent;\n"
+"    color: #6B5B7A;\n"
+"    font-family: \"Segoe UI\";\n"
+"    font-size: 12px;\n"
+"    font-weight: 600;\n"
+"    padding: 8px;\n"
 "}\n"
 "\n"
-"/* ===== Cabe\u00e7alho ===== */\n"
+"QMessageBox QLabel#qt_msgboxex_icon_label {\n"
+"    background-color: transparent;\n"
+"    padding: 8px;\n"
+"}\n"
+"\n"
+"QMessageBox QPushButton {\n"
+"    background-color: #FFFFFF;\n"
+"    color: #1A1030;\n"
+"    border: 1px solid #D4C8E0;\n"
+"    border-radius: 7px;\n"
+"    padding: 8px 18px;\n"
+"    min-width: 90px;\n"
+"    min-height: 32px;\n"
+"    font-family: \"Segoe UI\";\n"
+"    font-size: 12px;\n"
+"    font-weight: 600;\n"
+"}\n"
+"\n"
+"QMessageBox QPushButton:hover {\n"
+"    background-color: #F0ECF5;\n"
+""
+                        "    border-color: #8B5CF6;\n"
+"}\n"
+"\n"
+"QMessageBox QPushButton:pressed {\n"
+"    background-color: #DDD0E8;\n"
+"}\n"
+"\n"
+"QMessageBox QPushButton:default {\n"
+"    background-color: #3D1A6B;\n"
+"    color: #FFFFFF;\n"
+"    border: 1px solid #3D1A6B;\n"
+"}\n"
+"\n"
+"QMessageBox QPushButton:default:hover {\n"
+"    background-color: #4D2A7B;\n"
+"    border-color: #4D2A7B;\n"
+"}\n"
+"\n"
+"QMessageBox QPushButton:default:pressed {\n"
+"    background-color: #31124F;\n"
+"    border-color: #31124F;\n"
+"}\n"
+"\n"
 "QFrame#header {\n"
 "    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,\n"
 "        stop:0 #1A0A30, stop:1 #3D1A6B);\n"
@@ -68,14 +117,14 @@ class Ui_MainWindow(object):
 "    color: #B8A0D4;\n"
 "    font-size: 12px;\n"
 "    font-weight: 600;\n"
-"    background: rgba(255,255,255,0.08);\n"
+"    background: rgba(255,255,255,0.08);"
+                        "\n"
 "    border: 1px solid rgba(184, 160, 212, 0.35);\n"
 "    border-radius: 12px;\n"
 "    padding: 6px 14px;\n"
 "}\n"
 "\n"
-"QLabel#lbl_status_comun"
-                        "icacao[state=\"on\"] {\n"
+"QLabel#lbl_status_comunicacao[state=\"on\"] {\n"
 "    color: #A78BFA;\n"
 "    border-color: rgba(167, 139, 250, 0.5);\n"
 "}\n"
@@ -85,7 +134,6 @@ class Ui_MainWindow(object):
 "    border-color: rgba(225, 184, 180, 0.4);\n"
 "}\n"
 "\n"
-"/* ===== Cards de m\u00e9trica ===== */\n"
 "QFrame.metricCard {\n"
 "    background-color: #FFFFFF;\n"
 "    border: 1px solid #DCD0E8;\n"
@@ -107,13 +155,13 @@ class Ui_MainWindow(object):
 "QLabel.metricValue {\n"
 "    color: #1A1030;\n"
 "    font-size: 29px;\n"
-"    font-weight: 700;\n"
+""
+                        "    font-weight: 700;\n"
 "}\n"
 "\n"
 "QLabel.metricUnit {\n"
 "    color: #6B5B7A;\n"
-"    font-size: "
-                        "13px;\n"
+"    font-size: 13px;\n"
 "    font-weight: 600;\n"
 "}\n"
 "\n"
@@ -122,7 +170,6 @@ class Ui_MainWindow(object):
 "    font-size: 11px;\n"
 "}\n"
 "\n"
-"/* ===== Pain\u00e9is gen\u00e9ricos ===== */\n"
 "QFrame.panel {\n"
 "    background-color: #FFFFFF;\n"
 "    border: 1px solid #DCD0E8;\n"
@@ -140,7 +187,6 @@ class Ui_MainWindow(object):
 "    font-size: 11px;\n"
 "}\n"
 "\n"
-"/* ===== Card de status do disjuntor ===== */\n"
 "QFrame#statusCard {\n"
 "    border-radius: 12px;\n"
 "}\n"
@@ -178,7 +224,6 @@ class Ui_MainWindow(object):
 "    font-size: 10px;\n"
 "}\n"
 "\n"
-"/* ===== Controles ===== */\n"
 "QFrame#controlePanel {\n"
 "    background-color: #F0ECF5;\n"
 "    border: 1px solid #DCD0E8;\n"
@@ -212,8 +257,8 @@ class Ui_MainWindow(object):
 "}\n"
 "\n"
 "QPushButton {\n"
-""
-                        "    background-color: #FFFFFF;\n"
+"    background-color: #FFFFFF"
+                        ";\n"
 "    color: #1A1030;\n"
 "    border: 1px solid #D4C8E0;\n"
 "    border-radius: 7px;\n"
@@ -256,10 +301,9 @@ class Ui_MainWindow(object):
 "    background: #9E1B15;\n"
 "}\n"
 "\n"
-"/*"
-                        " ===== Hist\u00f3rico ===== */\n"
 "QFrame#historicoPanel {\n"
-"    background-color: #FFFFFF;\n"
+"   "
+                        " background-color: #FFFFFF;\n"
 "    border: 1px solid #DCD0E8;\n"
 "    border-radius: 12px;\n"
 "}\n"
@@ -301,8 +345,7 @@ class Ui_MainWindow(object):
 "\n"
 "QScrollBar::handle:vertical:hover {\n"
 "    background: #8B5CF6;\n"
-""
-                        "}\n"
+"}\n"
 "   ")
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
@@ -465,15 +508,37 @@ class Ui_MainWindow(object):
         self.layout_grafico = QVBoxLayout(self.grupo_grafico)
         self.layout_grafico.setObjectName(u"layout_grafico")
         self.layout_grafico.setContentsMargins(16, 14, 16, 12)
+        self.layout_cabecalho_grafico = QHBoxLayout()
+        self.layout_cabecalho_grafico.setSpacing(10)
+        self.layout_cabecalho_grafico.setObjectName(u"layout_cabecalho_grafico")
+        self.layout_titulo_grafico = QVBoxLayout()
+        self.layout_titulo_grafico.setSpacing(2)
+        self.layout_titulo_grafico.setObjectName(u"layout_titulo_grafico")
         self.lbl_grafico_titulo = QLabel(self.grupo_grafico)
         self.lbl_grafico_titulo.setObjectName(u"lbl_grafico_titulo")
 
-        self.layout_grafico.addWidget(self.lbl_grafico_titulo)
+        self.layout_titulo_grafico.addWidget(self.lbl_grafico_titulo)
 
         self.lbl_grafico_subtitulo = QLabel(self.grupo_grafico)
         self.lbl_grafico_subtitulo.setObjectName(u"lbl_grafico_subtitulo")
 
-        self.layout_grafico.addWidget(self.lbl_grafico_subtitulo)
+        self.layout_titulo_grafico.addWidget(self.lbl_grafico_subtitulo)
+
+
+        self.layout_cabecalho_grafico.addLayout(self.layout_titulo_grafico)
+
+        self.spacer_cabecalho_grafico = QSpacerItem(20, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.layout_cabecalho_grafico.addItem(self.spacer_cabecalho_grafico)
+
+        self.btn_tempo_real = QPushButton(self.grupo_grafico)
+        self.btn_tempo_real.setObjectName(u"btn_tempo_real")
+        self.btn_tempo_real.setMinimumSize(QSize(130, 34))
+
+        self.layout_cabecalho_grafico.addWidget(self.btn_tempo_real)
+
+
+        self.layout_grafico.addLayout(self.layout_cabecalho_grafico)
 
         self.widget_grafico = QWidget(self.grupo_grafico)
         self.widget_grafico.setObjectName(u"widget_grafico")
@@ -654,6 +719,7 @@ class Ui_MainWindow(object):
         self.lbl_grafico_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelTitle", None))
         self.lbl_grafico_subtitulo.setText(QCoreApplication.translate("MainWindow", u"\u00daltimas 24 horas \u00b7 hist\u00f3rico pr\u00e9-carregado", None))
         self.lbl_grafico_subtitulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelSubtitle", None))
+        self.btn_tempo_real.setText(QCoreApplication.translate("MainWindow", u"Tempo Real", None))
         self.statusCard.setProperty(u"estado", QCoreApplication.translate("MainWindow", u"fechado", None))
         self.lbl_disjuntor_titulo.setText(QCoreApplication.translate("MainWindow", u"Prote\u00e7\u00e3o geral", None))
         self.lbl_disjuntor_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelTitle", None))
@@ -678,4 +744,3 @@ class Ui_MainWindow(object):
         ___qtablewidgetitem3 = self.tabela_registros.horizontalHeaderItem(3)
         ___qtablewidgetitem3.setText(QCoreApplication.translate("MainWindow", u"Descri\u00e7\u00e3o", None))
     # retranslateUi
-
