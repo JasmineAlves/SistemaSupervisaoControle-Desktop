@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <ui version="4.0">
  <class>MainWindow</class>
  <widget class="QMainWindow" name="MainWindow">
@@ -26,7 +26,7 @@ QMainWindow {
 }
 
 QWidget {
-    font-family: &quot;Segoe UI&quot;;
+    font-family: "Segoe UI";
     color: #1A1030;
 }
 
@@ -116,12 +116,12 @@ QLabel#lbl_status_comunicacao {
     padding: 6px 14px;
 }
 
-QLabel#lbl_status_comunicacao[state=&quot;on&quot;] {
+QLabel#lbl_status_comunicacao[state="on"] {
     color: #A78BFA;
     border-color: rgba(167, 139, 250, 0.5);
 }
 
-QLabel#lbl_status_comunicacao[state=&quot;off&quot;] {
+QLabel#lbl_status_comunicacao[state="off"] {
     color: #E1B8B4;
     border-color: rgba(225, 184, 180, 0.4);
 }
@@ -135,7 +135,7 @@ QFrame.metricCard {
 QFrame#grupo_tensao { border-left: 4px solid #6D28D9; }
 QFrame#grupo_corrente { border-left: 4px solid #7C3AED; }
 QFrame#grupo_potencia { border-left: 4px solid #8B5CF6; }
-QFrame#grupo_potencia[alerta=&quot;true&quot;] { border-left: 4px solid #EA580C; background: #FFF7ED; }
+QFrame#grupo_potencia[alerta="true"] { border-left: 4px solid #EA580C; background: #FFF7ED; }
 
 QLabel.metricTitle {
     color: #6B5B7A;
@@ -182,23 +182,23 @@ QFrame#statusCard {
     border-radius: 12px;
 }
 
-QFrame#statusCard[estado=&quot;fechado&quot;] {
+QFrame#statusCard[estado="fechado"] {
     background: #F0ECF5;
     border: 1px solid #D4C8E0;
 }
 
-QFrame#statusCard[estado=&quot;aberto&quot;] {
+QFrame#statusCard[estado="aberto"] {
     background: #FDECEC;
     border: 1px solid #F3C1BC;
 }
 
-QLabel#lbl_status_disjuntor[estado=&quot;fechado&quot;] {
+QLabel#lbl_status_disjuntor[estado="fechado"] {
     color: #5B21B6;
     font-size: 18px;
     font-weight: 700;
 }
 
-QLabel#lbl_status_disjuntor[estado=&quot;aberto&quot;] {
+QLabel#lbl_status_disjuntor[estado="aberto"] {
     color: #B42318;
     font-size: 18px;
     font-weight: 700;
@@ -333,6 +333,11 @@ QScrollBar::handle:vertical {
 
 QScrollBar::handle:vertical:hover {
     background: #8B5CF6;
+}
+
+QDateEdit {
+    background-color: white;
+    color: #1A1030;
 }
    </string>
   </property>
@@ -675,7 +680,7 @@ QScrollBar::handle:vertical:hover {
         <property name="minimumSize">
          <size>
           <width>560</width>
-          <height>280</height>
+          <height>230</height>
          </size>
         </property>
         <property name="class" stdset="0">
@@ -683,93 +688,77 @@ QScrollBar::handle:vertical:hover {
         </property>
         <layout class="QVBoxLayout" name="layout_grafico">
          <property name="leftMargin">
-          <number>16</number>
-         </property>
-         <property name="topMargin">
-          <number>14</number>
-         </property>
-         <property name="rightMargin">
-          <number>16</number>
-         </property>
-         <property name="bottomMargin">
           <number>12</number>
          </property>
-<item>
- <layout class="QHBoxLayout" name="layout_cabecalho_grafico">
-
-  <property name="spacing">
-   <number>10</number>
-  </property>
-
-  <!-- Título e subtítulo -->
-  <item>
-   <layout class="QVBoxLayout" name="layout_titulo_grafico">
-
-    <property name="spacing">
-     <number>2</number>
-    </property>
-
-    <item>
-     <widget class="QLabel" name="lbl_grafico_titulo">
-      <property name="text">
-       <string>Curva de demanda de potência</string>
-      </property>
-      <property name="class" stdset="0">
-       <string>panelTitle</string>
-      </property>
-     </widget>
-    </item>
-
-    <item>
-     <widget class="QLabel" name="lbl_grafico_subtitulo">
-      <property name="text">
-       <string>Últimas 24 horas · histórico pré-carregado</string>
-      </property>
-      <property name="class" stdset="0">
-       <string>panelSubtitle</string>
-      </property>
-     </widget>
-    </item>
-
-   </layout>
-  </item>
-
-  <!-- Empurra o botão para a direita -->
-  <item>
-   <spacer name="spacer_cabecalho_grafico">
-    <property name="orientation">
-     <enum>Qt::Orientation::Horizontal</enum>
-    </property>
-
-    <property name="sizeHint" stdset="0">
-     <size>
-      <width>20</width>
-      <height>20</height>
-     </size>
-    </property>
-   </spacer>
-  </item>
-
-  <!-- Botão de tempo real -->
-  <item>
-   <widget class="QPushButton" name="btn_tempo_real">
-
-    <property name="minimumSize">
-     <size>
-      <width>130</width>
-      <height>34</height>
-     </size>
-    </property>
-
-    <property name="text">
-     <string>Tempo Real</string>
-    </property>
-
-   </widget>
-  </item>
-
- </layout>
-</item>
+         <property name="topMargin">
+          <number>10</number>
+         </property>
+         <property name="rightMargin">
+          <number>12</number>
+         </property>
+         <property name="bottomMargin">
+          <number>8</number>
+         </property>
+         <item>
+          <layout class="QHBoxLayout" name="layout_cabecalho_grafico">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+           <item>
+            <layout class="QVBoxLayout" name="layout_titulo_grafico">
+             <property name="spacing">
+              <number>2</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_grafico_titulo">
+               <property name="text">
+                <string>Curva de demanda de potência</string>
+               </property>
+               <property name="class" stdset="0">
+                <string>panelTitle</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_grafico_subtitulo">
+               <property name="text">
+                <string>Últimas 24 horas · histórico pré-carregado</string>
+               </property>
+               <property name="class" stdset="0">
+                <string>panelSubtitle</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <spacer name="spacer_cabecalho_grafico">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_tempo_real">
+             <property name="minimumSize">
+              <size>
+               <width>130</width>
+               <height>38</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>Tempo Real</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
          <item>
           <widget class="QWidget" name="widget_grafico" native="true">
            <property name="minimumSize">
@@ -788,7 +777,7 @@ QScrollBar::handle:vertical:hover {
         <property name="minimumSize">
          <size>
           <width>280</width>
-          <height>280</height>
+          <height>230</height>
          </size>
         </property>
         <property name="estado" stdset="0">
@@ -796,16 +785,16 @@ QScrollBar::handle:vertical:hover {
         </property>
         <layout class="QVBoxLayout" name="layout_status">
          <property name="leftMargin">
-          <number>18</number>
+          <number>14</number>
          </property>
          <property name="topMargin">
-          <number>14</number>
+          <number>10</number>
          </property>
          <property name="rightMargin">
-          <number>18</number>
+          <number>14</number>
          </property>
          <property name="bottomMargin">
-          <number>14</number>
+          <number>10</number>
          </property>
          <item>
           <widget class="QLabel" name="lbl_disjuntor_titulo">
@@ -992,7 +981,7 @@ QScrollBar::handle:vertical:hover {
       <property name="minimumSize">
        <size>
         <width>0</width>
-        <height>170</height>
+        <height>220</height>
        </size>
       </property>
       <layout class="QVBoxLayout" name="layout_historico">
@@ -1009,14 +998,129 @@ QScrollBar::handle:vertical:hover {
         <number>10</number>
        </property>
        <item>
-        <widget class="QLabel" name="lbl_historico_titulo">
-         <property name="text">
-          <string>Histórico de eventos e auditoria</string>
+        <layout class="QHBoxLayout" name="layout_cabecalho_historico">
+         <property name="spacing">
+          <number>8</number>
          </property>
-         <property name="class" stdset="0">
-          <string>panelTitle</string>
-         </property>
-        </widget>
+         <item>
+          <widget class="QLabel" name="lbl_historico_titulo">
+           <property name="text">
+            <string>Histórico de eventos e auditoria</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>panelTitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="spacer_historico_filtro">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QFrame" name="filtroPanel">
+           <layout class="QHBoxLayout" name="layout_filtro">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="lbl_filtro">
+              <property name="text">
+               <string>Data:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDateEdit" name="data_inicio">
+              <property name="minimumSize">
+               <size>
+                <width>85</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="date">
+               <date>
+                <year>2000</year>
+                <month>1</month>
+                <day>1</day>
+               </date>
+              </property>
+             <property name="calendarPopup"><bool>true</bool></property><property name="displayFormat"><string>dd/MM/yyyy</string></property></widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lbl_ate">
+              <property name="text">
+               <string>até</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDateEdit" name="data_fim">
+              <property name="minimumSize">
+               <size>
+                <width>85</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="date">
+               <date>
+                <year>2000</year>
+                <month>1</month>
+                <day>1</day>
+               </date>
+              </property>
+             <property name="calendarPopup"><bool>true</bool></property><property name="displayFormat"><string>dd/MM/yyyy</string></property></widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btn_filtrar">
+              <property name="minimumSize">
+               <size>
+                <width>62</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Filtrar</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btn_limpar_filtro">
+              <property name="minimumSize">
+               <size>
+                <width>75</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Limpar</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <widget class="QTableWidget" name="tabela_registros">
@@ -1075,6 +1179,6 @@ QScrollBar::handle:vertical:hover {
    </layout>
   </widget>
  </widget>
- <resources/>
- <connections/>
+ <resources />
+ <connections />
 </ui>

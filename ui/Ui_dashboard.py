@@ -15,10 +15,10 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDoubleSpinBox, QFrame,
-    QHBoxLayout, QHeaderView, QLabel, QMainWindow,
-    QPushButton, QSizePolicy, QSpacerItem, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDateEdit, QDoubleSpinBox,
+    QFrame, QHBoxLayout, QHeaderView, QLabel,
+    QMainWindow, QPushButton, QSizePolicy, QSpacerItem,
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -346,6 +346,12 @@ class Ui_MainWindow(object):
 "QScrollBar::handle:vertical:hover {\n"
 "    background: #8B5CF6;\n"
 "}\n"
+"\n"
+"QDateEdit {\n"
+"    background-color: white;\n"
+"    co"
+                        "lor: #1A1030;\n"
+"}\n"
 "   ")
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
@@ -504,10 +510,10 @@ class Ui_MainWindow(object):
         self.layout_monitoramento.setObjectName(u"layout_monitoramento")
         self.grupo_grafico = QFrame(self.centralwidget)
         self.grupo_grafico.setObjectName(u"grupo_grafico")
-        self.grupo_grafico.setMinimumSize(QSize(560, 280))
+        self.grupo_grafico.setMinimumSize(QSize(560, 230))
         self.layout_grafico = QVBoxLayout(self.grupo_grafico)
         self.layout_grafico.setObjectName(u"layout_grafico")
-        self.layout_grafico.setContentsMargins(16, 14, 16, 12)
+        self.layout_grafico.setContentsMargins(12, 10, 12, 8)
         self.layout_cabecalho_grafico = QHBoxLayout()
         self.layout_cabecalho_grafico.setSpacing(10)
         self.layout_cabecalho_grafico.setObjectName(u"layout_cabecalho_grafico")
@@ -533,7 +539,7 @@ class Ui_MainWindow(object):
 
         self.btn_tempo_real = QPushButton(self.grupo_grafico)
         self.btn_tempo_real.setObjectName(u"btn_tempo_real")
-        self.btn_tempo_real.setMinimumSize(QSize(130, 34))
+        self.btn_tempo_real.setMinimumSize(QSize(130, 38))
 
         self.layout_cabecalho_grafico.addWidget(self.btn_tempo_real)
 
@@ -551,10 +557,10 @@ class Ui_MainWindow(object):
 
         self.statusCard = QFrame(self.centralwidget)
         self.statusCard.setObjectName(u"statusCard")
-        self.statusCard.setMinimumSize(QSize(280, 280))
+        self.statusCard.setMinimumSize(QSize(280, 230))
         self.layout_status = QVBoxLayout(self.statusCard)
         self.layout_status.setObjectName(u"layout_status")
-        self.layout_status.setContentsMargins(18, 14, 18, 14)
+        self.layout_status.setContentsMargins(14, 10, 14, 10)
         self.lbl_disjuntor_titulo = QLabel(self.statusCard)
         self.lbl_disjuntor_titulo.setObjectName(u"lbl_disjuntor_titulo")
 
@@ -644,14 +650,71 @@ class Ui_MainWindow(object):
 
         self.historicoPanel = QFrame(self.centralwidget)
         self.historicoPanel.setObjectName(u"historicoPanel")
-        self.historicoPanel.setMinimumSize(QSize(0, 170))
+        self.historicoPanel.setMinimumSize(QSize(0, 220))
         self.layout_historico = QVBoxLayout(self.historicoPanel)
         self.layout_historico.setObjectName(u"layout_historico")
         self.layout_historico.setContentsMargins(14, 10, 14, 10)
+        self.layout_cabecalho_historico = QHBoxLayout()
+        self.layout_cabecalho_historico.setSpacing(8)
+        self.layout_cabecalho_historico.setObjectName(u"layout_cabecalho_historico")
         self.lbl_historico_titulo = QLabel(self.historicoPanel)
         self.lbl_historico_titulo.setObjectName(u"lbl_historico_titulo")
 
-        self.layout_historico.addWidget(self.lbl_historico_titulo)
+        self.layout_cabecalho_historico.addWidget(self.lbl_historico_titulo)
+
+        self.spacer_historico_filtro = QSpacerItem(20, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.layout_cabecalho_historico.addItem(self.spacer_historico_filtro)
+
+        self.filtroPanel = QFrame(self.historicoPanel)
+        self.filtroPanel.setObjectName(u"filtroPanel")
+        self.layout_filtro = QHBoxLayout(self.filtroPanel)
+        self.layout_filtro.setSpacing(4)
+        self.layout_filtro.setObjectName(u"layout_filtro")
+        self.layout_filtro.setContentsMargins(0, 0, 0, 0)
+        self.lbl_filtro = QLabel(self.filtroPanel)
+        self.lbl_filtro.setObjectName(u"lbl_filtro")
+
+        self.layout_filtro.addWidget(self.lbl_filtro)
+
+        self.data_inicio = QDateEdit(self.filtroPanel)
+        self.data_inicio.setObjectName(u"data_inicio")
+        self.data_inicio.setMinimumSize(QSize(85, 28))
+        self.data_inicio.setDate(QDate(2000, 1, 1))
+        self.data_inicio.setCalendarPopup(True)
+
+        self.layout_filtro.addWidget(self.data_inicio)
+
+        self.lbl_ate = QLabel(self.filtroPanel)
+        self.lbl_ate.setObjectName(u"lbl_ate")
+
+        self.layout_filtro.addWidget(self.lbl_ate)
+
+        self.data_fim = QDateEdit(self.filtroPanel)
+        self.data_fim.setObjectName(u"data_fim")
+        self.data_fim.setMinimumSize(QSize(85, 28))
+        self.data_fim.setDate(QDate(2000, 1, 1))
+        self.data_fim.setCalendarPopup(True)
+
+        self.layout_filtro.addWidget(self.data_fim)
+
+        self.btn_filtrar = QPushButton(self.filtroPanel)
+        self.btn_filtrar.setObjectName(u"btn_filtrar")
+        self.btn_filtrar.setMinimumSize(QSize(62, 28))
+
+        self.layout_filtro.addWidget(self.btn_filtrar)
+
+        self.btn_limpar_filtro = QPushButton(self.filtroPanel)
+        self.btn_limpar_filtro.setObjectName(u"btn_limpar_filtro")
+        self.btn_limpar_filtro.setMinimumSize(QSize(75, 28))
+
+        self.layout_filtro.addWidget(self.btn_limpar_filtro)
+
+
+        self.layout_cabecalho_historico.addWidget(self.filtroPanel)
+
+
+        self.layout_historico.addLayout(self.layout_cabecalho_historico)
 
         self.tabela_registros = QTableWidget(self.historicoPanel)
         if (self.tabela_registros.columnCount() < 4):
@@ -735,6 +798,12 @@ class Ui_MainWindow(object):
         self.btn_corte_emergencia.setText(QCoreApplication.translate("MainWindow", u"\u26a0  CORTE DE EMERG\u00caNCIA", None))
         self.lbl_historico_titulo.setText(QCoreApplication.translate("MainWindow", u"Hist\u00f3rico de eventos e auditoria", None))
         self.lbl_historico_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelTitle", None))
+        self.lbl_filtro.setText(QCoreApplication.translate("MainWindow", u"Data:", None))
+        self.data_inicio.setDisplayFormat(QCoreApplication.translate("MainWindow", u"dd/MM/yyyy", None))
+        self.lbl_ate.setText(QCoreApplication.translate("MainWindow", u"at\u00e9", None))
+        self.data_fim.setDisplayFormat(QCoreApplication.translate("MainWindow", u"dd/MM/yyyy", None))
+        self.btn_filtrar.setText(QCoreApplication.translate("MainWindow", u"Filtrar", None))
+        self.btn_limpar_filtro.setText(QCoreApplication.translate("MainWindow", u"Limpar", None))
         ___qtablewidgetitem = self.tabela_registros.horizontalHeaderItem(0)
         ___qtablewidgetitem.setText(QCoreApplication.translate("MainWindow", u"Data / Hora", None))
         ___qtablewidgetitem1 = self.tabela_registros.horizontalHeaderItem(1)
@@ -744,3 +813,4 @@ class Ui_MainWindow(object):
         ___qtablewidgetitem3 = self.tabela_registros.horizontalHeaderItem(3)
         ___qtablewidgetitem3.setText(QCoreApplication.translate("MainWindow", u"Descri\u00e7\u00e3o", None))
     # retranslateUi
+

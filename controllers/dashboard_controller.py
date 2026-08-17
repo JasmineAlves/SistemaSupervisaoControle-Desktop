@@ -1,7 +1,7 @@
 # Controle da supervisão do sistema
 from datetime import datetime, timedelta # data/hora e intervalo de tempo
 import pyqtgraph as pg # desenhar gráficos
-from PySide6.QtCore import QTimer # Executa função a cada certo período
+from PySide6.QtCore import QTimer, QDate # Executa função a cada certo período e base para datas
 from PySide6.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox # Base da janela principal e texto dentro das células da tabela
 from ui.Ui_dashboard import Ui_MainWindow # Interface criada pelo Qt Designer
 from models.medicao import Medicao # Medições
@@ -19,6 +19,14 @@ class DashController(QMainWindow):
         self.ui = Ui_MainWindow() # Objeto que representa a interface
         self.ui.setupUi(self) # Coloca a interface dentro da janela
         # Passa a ter acesso aos componentes
+
+        # Inicializa o filtro com a data atual
+        hoje = QDate.currentDate()
+        self.ui.data_inicio.setDate(hoje)
+        self.ui.data_fim.setDate(hoje)
+
+        # Indica se o filtro de data está ativo
+        self.filtro_data_ativo = False
 
         # Faz a simulação de uma medição inicial
         self.medicao_atual = Medicao(
@@ -44,6 +52,10 @@ class DashController(QMainWindow):
         # Guarda se o limite de potência já foi ultrapassado
         # Se a potência estava anteriormente acima do limite, evita registrar alerta a cada segundo
         self.limite_ultrapassado = False
+
+        # Se a potência ultrapassar o limite configurado por esse fator, disjuntor dispara sozinho
+        self.fator_sobrecorrente = 1.5
+        self.medicao_no_disparo = None
 
         # Configura o gráfico, chama a função que cria o gráfico
         self.configurar_grafico()
@@ -95,6 +107,10 @@ class DashController(QMainWindow):
 
         # Abre a janela de configuração de limites (QDialog modal)
         self.ui.btn_configuracao.clicked.connect(self.abrir_configuracao)
+
+        # Conecta os botões de filtro de data
+        self.ui.btn_filtrar.clicked.connect(self.filtrar_historico_por_data)
+        self.ui.btn_limpar_filtro.clicked.connect(self.limpar_filtro_data)
 
 
     def alternar_corte_emergencia(self):
@@ -368,7 +384,12 @@ class DashController(QMainWindow):
             if item["timestamp"] >= limite
         ]
 
+
+        # Simula a ativação automática do disjuntor 
+        self.verificar_protecao_sobrecorrente()
+
         # Verifica se aconteceu algum evento
+        self.verificar_eventos()
 
         # Atualiza os dados da interface
         self.atualizar_dashboard()
@@ -454,6 +475,21 @@ class DashController(QMainWindow):
                 "font-weight: bold;"
             )
 
+    def verificar_protecao_sobrecorrente(self):
+        limite = self.ui.spin_limite_potencia.value()
+
+        sobrecorrente_severa = (
+            self.medicao_atual.disjuntor
+            and limite > 0
+            and self.medicao_atual.potencia > limite * self.fator_sobrecorrente
+        )
+
+        if sobrecorrente_severa:
+            # Guarda a medição que CAUSOU o disparo, antes de zerar
+            self.medicao_no_disparo = self.medicao_atual
+
+            self.simulador.alterar_disjuntor(False)
+            self.medicao_atual = self.simulador.gerar_medicao()
 
     def verificar_eventos(self):
         # Verifica se aconteceu alguma mudança relevante
@@ -471,11 +507,32 @@ class DashController(QMainWindow):
                 )
 
             else:
+                # Usa a medição guardada no instante do disparo
+                valor_disparo = (
+                    self.formatar_medicao_customizada(self.medicao_no_disparo)
+                    if self.medicao_no_disparo
+                    else self.formatar_medicao()
+                )
+
                 self.adicionar_registro(
                     tipo="Alerta",
-                    descricao="Disjuntor aberto / proteção ativada.",
-                    valor=self.formatar_medicao()
+                    descricao="Disjuntor aberto espontaneamente / proteção ativada.",
+                    valor=valor_disparo
                 )
+
+                QMessageBox.warning(
+                    self,
+                    "Proteção Ativada",
+                    "O disjuntor abriu espontaneamente devido a uma falha "
+                    "ou sobrecarga na instalação.\n\n"
+                    f"Medição no momento do disparo: {valor_disparo}"
+                )
+
+                if not self.corte_emergencia_ativo:
+                    self.corte_emergencia_ativo = True
+                    self.ui.btn_corte_emergencia.setText(
+                        "▶  REATIVAR SISTEMA"
+                    )
 
             self.disjuntor_anterior = medicao.disjuntor
 
@@ -529,13 +586,25 @@ class DashController(QMainWindow):
         self.atualizar_tabela()
 
     def atualizar_tabela(self):
-        # Att a tabela com os registros do sistema
+        # Atualiza a tabela respeitando o filtro, se estiver ativo
 
+        if self.filtro_data_ativo:
+            data_inicio = self.ui.data_inicio.date().toPython()
+            data_fim = self.ui.data_fim.date().toPython()
+
+            registros_exibidos = [
+                registro
+                for registro in self.registros
+                if data_inicio <= registro.timestamp.date() <= data_fim
+            ]
+        else:
+            registros_exibidos = self.registros
+
+        # Atualiza a tabela de uma vez, evitando efeito visual de "piscar"
+        self.ui.tabela_registros.setUpdatesEnabled(False)
         self.ui.tabela_registros.setRowCount(0)
 
-        for registro in self.registros:
-
-            # Para registros ocorrerem em ordem decrescente
+        for registro in registros_exibidos:
             linha = 0
 
             self.ui.tabela_registros.insertRow(
@@ -580,6 +649,9 @@ class DashController(QMainWindow):
                 )
             )
 
+        self.ui.tabela_registros.setUpdatesEnabled(True)
+        self.ui.tabela_registros.viewport().update()
+
     def configurar_tabela(self):
         # Configura o tamanho das colunas da tabela
 
@@ -594,13 +666,52 @@ class DashController(QMainWindow):
         # Para evitar um espaço vazio que estava aparecendo à direita
         self.ui.tabela_registros.horizontalHeader().setStretchLastSection(True)
 
+    def filtrar_historico_por_data(self):
+        # Filtra a tabela por intervalo de datas selecionado
+        
+        data_inicio = self.ui.data_inicio.date().toPython()
+        data_fim = self.ui.data_fim.date().toPython()
+        
+        # Impede intervalo inválido
+        if data_inicio > data_fim:
+            QMessageBox.warning(
+                self,
+                "Filtro inválido",
+                "A data inicial não pode ser maior que a data final."
+            )
+            return
+
+        self.filtro_data_ativo = True
+
+        # Atualiza a tabela usando o filtro
+        self.atualizar_tabela()
+
+    def limpar_filtro_data(self):
+        # Remove o filtro
+        self.filtro_data_ativo = False
+
+        # Volta as datas para o dia atual
+        hoje = QDate.currentDate()
+        self.ui.data_inicio.setDate(hoje)
+        self.ui.data_fim.setDate(hoje)
+
+        # Mostra novamente todos os registros
+        self.atualizar_tabela()
+
     def formatar_medicao(self):
         # Formata a medição para mostrar nos registros
-
         return (
             f"{self.medicao_atual.tensao:.1f} V / "
             f"{self.medicao_atual.corrente:.1f} A / "
             f"{self.medicao_atual.potencia:.1f} W"
+        )
+
+    def formatar_medicao_customizada(self, medicao):
+        # Formata uma medição específica (não necessariamente a atual)
+        return (
+            f"{medicao.tensao:.1f} V / "
+            f"{medicao.corrente:.1f} A / "
+            f"{medicao.potencia:.1f} W"
         )
 
     def abrir_comunicacao(self):
