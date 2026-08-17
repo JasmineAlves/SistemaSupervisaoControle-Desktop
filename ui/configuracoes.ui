@@ -3,83 +3,321 @@
  <class>Dialog</class>
  <widget class="QDialog" name="Dialog">
   <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>629</width>
-    <height>182</height>
-   </rect>
+   <rect><x>0</x><y>0</y><width>560</width><height>440</height></rect>
   </property>
-  <property name="windowTitle">
-   <string>Dialog</string>
+  <property name="minimumSize"><size><width>520</width><height>420</height></size></property>
+  <property name="windowTitle"><string>Configuração de Limites</string></property>
+  <property name="styleSheet">
+   <string notr="true">
+/* ===== Base (mesmos tokens do dashboard) ===== */
+QDialog {
+    background-color: #F4F0F8;
+}
+
+QWidget {
+    font-family: "Segoe UI";
+    color: #1A1030;
+}
+
+QMessageBox {
+    background-color: #3D1A6B;
+    color: #ffffff;
+}
+
+QMessageBox QLabel {
+    color: #ffffff;
+}
+
+/* ===== Cabeçalho ===== */
+QFrame#header {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1A0A30, stop:1 #3D1A6B);
+    border-radius: 14px;
+}
+
+QLabel#lbl_titulo {
+    color: #FFFFFF;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+QLabel#lbl_subtitulo {
+    color: #B8A0D4;
+    font-size: 12px;
+}
+
+/* ===== Painel de regras ===== */
+QFrame.panel {
+    background-color: #FFFFFF;
+    border: 1px solid #DCD0E8;
+    border-radius: 12px;
+}
+
+QLabel.panelTitle {
+    color: #1A1030;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QLabel.panelSubtitle {
+    color: #8B7A9A;
+    font-size: 11px;
+}
+
+QLabel.fieldLabel {
+    color: #6B5B7A;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+/* ===== Painel de previsão calculada ===== */
+QFrame#previsaoCard {
+    background-color: #F0ECF5;
+    border: 1px solid #D4C8E0;
+    border-radius: 12px;
+}
+
+QLabel#lbl_previsao_titulo {
+    color: #6B5B7A;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+QLabel#lbl_potencia_calculada {
+    color: #5B21B6;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+/* ===== Campos ===== */
+QDoubleSpinBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D4C8E0;
+    border-radius: 7px;
+    padding: 6px 10px;
+    min-height: 30px;
+}
+
+QDoubleSpinBox:focus {
+    border: 1px solid #6D28D9;
+}
+
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    width: 0px; height: 0px; border: none; background: transparent;
+}
+
+/* ===== Botões ===== */
+QPushButton {
+    background-color: #FFFFFF;
+    color: #1A1030;
+    border: 1px solid #D4C8E0;
+    border-radius: 7px;
+    padding: 10px 16px;
+    font-weight: 600;
+    min-height: 18px;
+}
+
+QPushButton:hover {
+    background-color: #F0ECF5;
+    border-color: #8B5CF6;
+}
+
+QPushButton#btn_salvar {
+    background-color: #3D1A6B;
+    color: #FFFFFF;
+    border: none;
+}
+
+QPushButton#btn_salvar:hover {
+    background-color: #4D2A7B;
+}
+
+QPushButton#btn_cancelar {
+    color: #6B5B7A;
+}
+   </string>
   </property>
-  <widget class="QGroupBox" name="groupBox">
-   <property name="geometry">
-    <rect>
-     <x>30</x>
-     <y>20</y>
-     <width>561</width>
-     <height>151</height>
-    </rect>
-   </property>
-   <property name="title">
-    <string>Configuração de Parametros</string>
-   </property>
-   <widget class="QWidget" name="">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>20</y>
-      <width>541</width>
-      <height>121</height>
-     </rect>
-    </property>
-    <layout class="QVBoxLayout" name="verticalLayout">
+
+  <layout class="QVBoxLayout" name="layout_principal">
+   <property name="spacing"><number>14</number></property>
+   <property name="leftMargin"><number>22</number></property>
+   <property name="topMargin"><number>18</number></property>
+   <property name="rightMargin"><number>22</number></property>
+   <property name="bottomMargin"><number>18</number></property>
+
+   <!-- ===== Cabeçalho ===== -->
+   <item>
+    <widget class="QFrame" name="header">
+     <property name="minimumSize"><size><width>0</width><height>72</height></size></property>
+     <property name="maximumSize"><size><width>16777215</width><height>72</height></size></property>
+     <layout class="QVBoxLayout" name="layout_header">
+      <property name="leftMargin"><number>20</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>20</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <property name="spacing"><number>2</number></property>
+      <item>
+       <spacer name="spacer_header_top">
+        <property name="orientation"><enum>Qt::Vertical</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>20</width><height>8</height></size></property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_titulo">
+        <property name="text"><string>Configuração de Limites</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_subtitulo">
+        <property name="text"><string>Parâmetros de alerta para tensão e corrente</string></property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="spacer_header_bottom">
+        <property name="orientation"><enum>Qt::Vertical</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>20</width><height>8</height></size></property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ===== Regras de limite ===== -->
+   <item>
+    <widget class="QFrame" name="grupo_regras">
+     <property name="class" stdset="0"><string>panel</string></property>
+     <layout class="QVBoxLayout" name="layout_regras">
+      <property name="leftMargin"><number>20</number></property>
+      <property name="topMargin"><number>16</number></property>
+      <property name="rightMargin"><number>20</number></property>
+      <property name="bottomMargin"><number>18</number></property>
+      <property name="spacing"><number>14</number></property>
+
+      <item>
+       <widget class="QLabel" name="lbl_regras_titulo">
+        <property name="text"><string>Regras de alerta</string></property>
+        <property name="class" stdset="0"><string>panelTitle</string></property>
+       </widget>
+      </item>
+
+      <item>
+       <layout class="QHBoxLayout" name="layout_campos">
+        <property name="spacing"><number>14</number></property>
+
+        <item>
+         <layout class="QVBoxLayout" name="layout_tensao">
+          <property name="spacing"><number>4</number></property>
+          <item>
+           <widget class="QLabel" name="lbl_tensao_titulo">
+            <property name="text"><string>REGRA 1 · TENSÃO MÁXIMA</string></property>
+            <property name="class" stdset="0"><string>fieldLabel</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QDoubleSpinBox" name="spin_tensao_max">
+            <property name="suffix"><string> V</string></property>
+            <property name="maximum"><double>9999.000000000000000</double></property>
+            <property name="value"><double>240.000000000000000</double></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+
+        <item>
+         <layout class="QVBoxLayout" name="layout_corrente">
+          <property name="spacing"><number>4</number></property>
+          <item>
+           <widget class="QLabel" name="lbl_corrente_titulo">
+            <property name="text"><string>REGRA 2 · CORRENTE MÁXIMA</string></property>
+            <property name="class" stdset="0"><string>fieldLabel</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QDoubleSpinBox" name="spin_corrente_max">
+            <property name="suffix"><string> A</string></property>
+            <property name="maximum"><double>9999.000000000000000</double></property>
+            <property name="value"><double>10.000000000000000</double></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+
+       </layout>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ===== Prévia calculada (P = V x I) ===== -->
+   <item>
+    <widget class="QFrame" name="previsaoCard">
+     <property name="minimumSize"><size><width>0</width><height>62</height></size></property>
+     <layout class="QHBoxLayout" name="layout_previsao">
+      <property name="leftMargin"><number>18</number></property>
+      <property name="topMargin"><number>10</number></property>
+      <property name="rightMargin"><number>18</number></property>
+      <property name="bottomMargin"><number>10</number></property>
+      <item>
+       <layout class="QVBoxLayout" name="layout_previsao_texto">
+        <property name="spacing"><number>2</number></property>
+        <item>
+         <widget class="QLabel" name="lbl_previsao_titulo">
+          <property name="text"><string>LIMITE DE POTÊNCIA RESULTANTE (P = V × I)</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_potencia_calculada">
+          <property name="text"><string>2400.0 W</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <spacer name="spacer_previsao">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <spacer name="spacer_meio">
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <property name="sizeHint" stdset="0"><size><width>20</width><height>10</height></size></property>
+    </spacer>
+   </item>
+
+   <!-- ===== Ações ===== -->
+   <item>
+    <layout class="QHBoxLayout" name="layout_acoes">
+     <property name="spacing"><number>10</number></property>
      <item>
-      <layout class="QGridLayout" name="gridLayout" columnstretch="3,10" columnminimumwidth="0,0">
-       <item row="1" column="0">
-        <widget class="QLabel" name="label_2">
-         <property name="text">
-          <string>Tensão Máxima:</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QDoubleSpinBox" name="spin_tensao_max"/>
-       </item>
-       <item row="0" column="0">
-        <widget class="QLabel" name="label">
-         <property name="text">
-          <string>Corrente Máxima:</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="1">
-        <widget class="QDoubleSpinBox" name="spin_corrente_max"/>
-       </item>
-      </layout>
+      <spacer name="spacer_acoes">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+      </spacer>
      </item>
      <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_6">
-       <item>
-        <widget class="QPushButton" name="btn_salvar">
-         <property name="text">
-          <string>Salvar</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btn_cancelar">
-         <property name="text">
-          <string>Cancelar</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
+      <widget class="QPushButton" name="btn_cancelar">
+       <property name="minimumSize"><size><width>110</width><height>40</height></size></property>
+       <property name="text"><string>Cancelar</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_salvar">
+       <property name="minimumSize"><size><width>110</width><height>40</height></size></property>
+       <property name="text"><string>Salvar</string></property>
+      </widget>
      </item>
     </layout>
-   </widget>
-  </widget>
+   </item>
+
+  </layout>
  </widget>
  <resources/>
  <connections/>

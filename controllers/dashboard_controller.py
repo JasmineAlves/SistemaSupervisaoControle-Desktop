@@ -1,5 +1,4 @@
 # Controle da supervisão do sistema
-
 from datetime import datetime, timedelta # data/hora e intervalo de tempo
 import pyqtgraph as pg # desenhar gráficos
 from PySide6.QtCore import QTimer # Executa função a cada certo período
@@ -8,6 +7,8 @@ from ui.Ui_dashboard import Ui_MainWindow # Interface criada pelo Qt Designer
 from models.medicao import Medicao # Medições
 from models.registro import Registro # Evento registrado no sistema
 from models.simulacao import Simulador
+from controllers.comunicacao_controller import ComunicacaoController
+from controllers.configuracao_controller import ConfiguracaoController
 
 # Classe principal
 class DashController(QMainWindow):
@@ -60,9 +61,7 @@ class DashController(QMainWindow):
         # Temporizador que atualiza periodicamente, timer dispara a função atualizar_medicao() é executada
         self.timer = QTimer()
 
-        self.timer.timeout.connect(
-            self.atualizar_medicao
-        )
+        self.timer.timeout.connect(self.atualizar_medicao)
 
         # Medição inicial
         self.atualizar_dashboard()
@@ -73,17 +72,23 @@ class DashController(QMainWindow):
         # Guarda o estado do corte de emergência
         self.corte_emergencia_ativo = False
         # Controla o corte de emergência
-        self.ui.btn_corte_emergencia.clicked.connect(
-            self.alternar_corte_emergencia
-        )
+        self.ui.btn_corte_emergencia.clicked.connect(self.alternar_corte_emergencia)
 
         # Guarda o limite anterior para registrar alterações
         self.limite_anterior = self.ui.spin_limite_potencia.value()
 
         # Verifica o limite quando ele é alterado
-        self.ui.spin_limite_potencia.valueChanged.connect(
-            self.verificar_limite
-        )
+        self.ui.spin_limite_potencia.valueChanged.connect(self.verificar_limite)
+
+        # Guarda instância do controller de comunicação
+        self.comunicacao_controller = ComunicacaoController(self)
+
+        # Abre a janela de comunicação serial
+        self.ui.btn_comunicacao.clicked.connect(self.abrir_comunicacao)
+
+        # Abre a janela de configuração de limites (QDialog modal)
+        self.ui.btn_configuracao.clicked.connect(self.abrir_configuracao)
+
 
     def alternar_corte_emergencia(self):
         # Confirma o corte ou a reativação do sistema
@@ -100,6 +105,10 @@ class DashController(QMainWindow):
 
                 # Atualiza o estado do disjuntor no simulador
                 self.simulador.alterar_disjuntor(False)
+
+                # Gera uma nova medição imediatamente, refletindo o corte
+                self.medicao_atual = self.simulador.gerar_medicao()
+                self.disjuntor_anterior = self.medicao_atual.disjuntor
 
                 # Atualiza o estado do corte
                 self.corte_emergencia_ativo = True
@@ -131,6 +140,10 @@ class DashController(QMainWindow):
 
                 # Religa o estado do disjuntor no simulador
                 self.simulador.alterar_disjuntor(True)
+
+                # Gera uma nova medição imediatamente, refletindo a religação
+                self.medicao_atual = self.simulador.gerar_medicao()
+                self.disjuntor_anterior = self.medicao_atual.disjuntor
 
                 # Atualiza o estado do corte
                 self.corte_emergencia_ativo = False
@@ -493,3 +506,44 @@ class DashController(QMainWindow):
             f"{self.medicao_atual.corrente:.1f} A / "
             f"{self.medicao_atual.potencia:.1f} W"
         )
+
+    def abrir_comunicacao(self):
+        # Exibe a janela de comunicação serial e, ao fechar,
+        # reflete o estado da conexão no badge do cabeçalho
+        self.comunicacao_controller.exec()
+
+        conectado = self.comunicacao_controller.model.is_connected
+
+        if conectado:
+            self.ui.lbl_status_comunicacao.setText(
+                "●  " + self.comunicacao_controller.model.obter_status()
+            )
+        else:
+            self.ui.lbl_status_comunicacao.setText(
+                "●  Comunicação: Desconectado"
+            )
+
+        self.ui.lbl_status_comunicacao.setProperty(
+            "state", "on" if conectado else "off"
+        )
+        self.ui.lbl_status_comunicacao.style().unpolish(self.ui.lbl_status_comunicacao)
+        self.ui.lbl_status_comunicacao.style().polish(self.ui.lbl_status_comunicacao)
+
+    def abrir_configuracao(self):
+        # Exibe a janela modal de configuração de limites (tensão / corrente)
+        dialogo = ConfiguracaoController(self)
+
+        if dialogo.exec() == dialogo.DialogCode.Accepted:
+            # Resgata o limite de potência calculado (P = V x I) e aplica no dashboard
+            novo_limite = dialogo.model.lim_potencia
+
+            self.ui.spin_limite_potencia.setValue(novo_limite)
+
+            self.adicionar_registro(
+                tipo="Comando",
+                descricao=(
+                    f"Limites atualizados: {dialogo.model.lim_tensao:.1f} V / "
+                    f"{dialogo.model.lim_corrente:.1f} A"
+                ),
+                valor=f"{novo_limite:.1f} W"
+            )

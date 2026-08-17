@@ -1,9 +1,9 @@
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QDialog
 from ui.Ui_comunicacao import Ui_Form
 from models.comunicacao import ComunicacaoModel
 
 
-class ComunicacaoController(QWidget):
+class ComunicacaoController(QDialog):
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
 
@@ -19,6 +19,7 @@ class ComunicacaoController(QWidget):
     def configurar_sinais(self):
         self.ui.btn_conectar.clicked.connect(self.ao_conectar)
         self.ui.btn_desconectar.clicked.connect(self.ao_desconectar)
+        self.ui.btn_fechar.clicked.connect(self.close)
 
     def carregar_portas_com(self):
         self.ui.combo_porta.clear()
@@ -38,17 +39,30 @@ class ComunicacaoController(QWidget):
         sucesso = self.model.conectar(porta, baud_rate, timeout)
 
         if sucesso:
-            self.ui.lbl_status.setText(self.model.obter_status())
+            self.atualizar_status(self.model.obter_status(), conectado=True)
             self.atualizar_interface()
         else:
-            self.ui.lbl_status.setText("Status : Erro - Nenhuma porta selecionada")
+            self.atualizar_status("Status : Erro - Nenhuma porta selecionada", conectado=False)
 
     def ao_desconectar(self):
         self.model.desconectar()
-        
-        self.ui.lbl_status.setText(self.model.obter_status())
+
+        self.atualizar_status(self.model.obter_status(), conectado=False)
         self.carregar_portas_com()
         self.atualizar_interface()
+
+    def atualizar_status(self, texto, conectado):
+        # Atualiza o texto e o estado visual (badge) do card de status
+        self.ui.lbl_status.setText(texto)
+
+        estado = "conectado" if conectado else "desconectado"
+
+        self.ui.statusCard.setProperty("estado", estado)
+        self.ui.lbl_status.setProperty("estado", estado)
+
+        for widget in (self.ui.statusCard, self.ui.lbl_status):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
 
     def atualizar_interface(self):
         conectado = self.model.is_connected
@@ -59,3 +73,8 @@ class ComunicacaoController(QWidget):
 
         self.ui.btn_conectar.setEnabled(not conectado)
         self.ui.btn_desconectar.setEnabled(conectado)
+
+        if conectado:
+            self.atualizar_status(self.model.obter_status(), conectado=True)
+        else:
+            self.atualizar_status(self.model.obter_status(), conectado=False)

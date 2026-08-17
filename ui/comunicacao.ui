@@ -1,158 +1,374 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>Form</class>
- <widget class="QWidget" name="Form">
-  <property name="windowTitle">
-   <string>Form</string>
+ <widget class="QDialog" name="Form">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>560</width><height>460</height></rect>
   </property>
-  <widget class="QGroupBox" name="groupBox">
-   <property name="geometry">
-    <rect>
-     <x>10</x>
-     <y>0</y>
-     <width>611</width>
-     <height>261</height>
-    </rect>
-   </property>
-   <property name="title">
-    <string>Configuração de Comunicação Serial</string>
-   </property>
-   <widget class="QWidget" name="">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>31</y>
-      <width>591</width>
-      <height>211</height>
-     </rect>
-    </property>
-    <layout class="QVBoxLayout" name="verticalLayout_2" stretch="5,1,3">
+  <property name="minimumSize"><size><width>520</width><height>440</height></size></property>
+  <property name="windowTitle"><string>Comunicação Serial</string></property>
+  <property name="styleSheet">
+   <string notr="true">
+/* ===== Base (mesmos tokens do dashboard) ===== */
+QDialog {
+    background-color: #F4F0F8;
+}
+
+QWidget {
+    font-family: "Segoe UI";
+    color: #1A1030;
+}
+
+QMessageBox {
+    background-color: #3D1A6B;
+    color: #ffffff;
+}
+
+QMessageBox QLabel {
+    color: #ffffff;
+}
+
+/* ===== Cabeçalho ===== */
+QFrame#header {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1A0A30, stop:1 #3D1A6B);
+    border-radius: 14px;
+}
+
+QLabel#lbl_titulo {
+    color: #FFFFFF;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+QLabel#lbl_subtitulo {
+    color: #B8A0D4;
+    font-size: 12px;
+}
+
+/* ===== Painel de status da conexão ===== */
+QFrame#statusCard {
+    border-radius: 12px;
+}
+
+QFrame#statusCard[estado="conectado"] {
+    background: #F0ECF5;
+    border: 1px solid #D4C8E0;
+}
+
+QFrame#statusCard[estado="desconectado"] {
+    background: #FDECEC;
+    border: 1px solid #F3C1BC;
+}
+
+QLabel#lbl_status[estado="conectado"] {
+    color: #5B21B6;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QLabel#lbl_status[estado="desconectado"] {
+    color: #B42318;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+/* ===== Painel de parâmetros ===== */
+QFrame.panel {
+    background-color: #FFFFFF;
+    border: 1px solid #DCD0E8;
+    border-radius: 12px;
+}
+
+QLabel.panelTitle {
+    color: #1A1030;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QLabel.panelSubtitle {
+    color: #8B7A9A;
+    font-size: 11px;
+}
+
+QLabel.fieldLabel {
+    color: #6B5B7A;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+/* ===== Campos ===== */
+QComboBox, QSpinBox, QDoubleSpinBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D4C8E0;
+    border-radius: 7px;
+    padding: 6px 10px;
+    min-height: 30px;
+}
+
+QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #6D28D9;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    border: 1px solid #DCD0E8;
+    selection-background-color: #F0ECF5;
+    selection-color: #1A1030;
+    outline: none;
+}
+
+QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    width: 0px; height: 0px; border: none; background: transparent;
+}
+
+/* ===== Botões ===== */
+QPushButton {
+    background-color: #FFFFFF;
+    color: #1A1030;
+    border: 1px solid #D4C8E0;
+    border-radius: 7px;
+    padding: 10px 16px;
+    font-weight: 600;
+    min-height: 18px;
+}
+
+QPushButton:hover {
+    background-color: #F0ECF5;
+    border-color: #8B5CF6;
+}
+
+QPushButton:disabled {
+    color: #B7ABC4;
+    background-color: #F7F4FA;
+    border-color: #E6DEEE;
+}
+
+QPushButton#btn_conectar {
+    background-color: #3D1A6B;
+    color: #FFFFFF;
+    border: none;
+}
+
+QPushButton#btn_conectar:hover {
+    background-color: #4D2A7B;
+}
+
+QPushButton#btn_conectar:disabled {
+    background-color: #C9BEDC;
+    color: #F4F0F8;
+}
+
+QPushButton#btn_desconectar {
+    color: #B42318;
+    border: 1px solid #F3C1BC;
+}
+
+QPushButton#btn_desconectar:hover {
+    background-color: #FDECEC;
+    border-color: #E23B32;
+}
+
+QPushButton#btn_fechar {
+    background: transparent;
+    border: none;
+    color: #6B5B7A;
+}
+
+QPushButton#btn_fechar:hover {
+    color: #3D1A6B;
+    text-decoration: underline;
+}
+   </string>
+  </property>
+
+  <layout class="QVBoxLayout" name="layout_principal">
+   <property name="spacing"><number>14</number></property>
+   <property name="leftMargin"><number>22</number></property>
+   <property name="topMargin"><number>18</number></property>
+   <property name="rightMargin"><number>22</number></property>
+   <property name="bottomMargin"><number>18</number></property>
+
+   <!-- ===== Cabeçalho ===== -->
+   <item>
+    <widget class="QFrame" name="header">
+     <property name="minimumSize"><size><width>0</width><height>72</height></size></property>
+     <property name="maximumSize"><size><width>16777215</width><height>72</height></size></property>
+     <layout class="QVBoxLayout" name="layout_header">
+      <property name="leftMargin"><number>20</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>20</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <property name="spacing"><number>2</number></property>
+      <item>
+       <spacer name="spacer_header_top">
+        <property name="orientation"><enum>Qt::Vertical</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>20</width><height>8</height></size></property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_titulo">
+        <property name="text"><string>Comunicação Serial</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_subtitulo">
+        <property name="text"><string>Configuração da conexão com o microcontrolador</string></property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="spacer_header_bottom">
+        <property name="orientation"><enum>Qt::Vertical</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>20</width><height>8</height></size></property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ===== Status da conexão ===== -->
+   <item>
+    <widget class="QFrame" name="statusCard">
+     <property name="minimumSize"><size><width>0</width><height>56</height></size></property>
+     <property name="estado" stdset="0"><string>desconectado</string></property>
+     <layout class="QHBoxLayout" name="layout_status">
+      <property name="leftMargin"><number>18</number></property>
+      <property name="topMargin"><number>8</number></property>
+      <property name="rightMargin"><number>18</number></property>
+      <property name="bottomMargin"><number>8</number></property>
+      <item>
+       <widget class="QLabel" name="lbl_status">
+        <property name="text"><string>●  Status : Desconectado</string></property>
+        <property name="estado" stdset="0"><string>desconectado</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ===== Parâmetros de conexão ===== -->
+   <item>
+    <widget class="QFrame" name="grupo_parametros">
+     <property name="class" stdset="0"><string>panel</string></property>
+     <layout class="QVBoxLayout" name="layout_parametros">
+      <property name="leftMargin"><number>20</number></property>
+      <property name="topMargin"><number>16</number></property>
+      <property name="rightMargin"><number>20</number></property>
+      <property name="bottomMargin"><number>18</number></property>
+      <property name="spacing"><number>12</number></property>
+
+      <item>
+       <widget class="QLabel" name="lbl_parametros_titulo">
+        <property name="text"><string>Parâmetros de conexão</string></property>
+        <property name="class" stdset="0"><string>panelTitle</string></property>
+       </widget>
+      </item>
+
+      <item>
+       <layout class="QVBoxLayout" name="layout_porta">
+        <property name="spacing"><number>4</number></property>
+        <item>
+         <widget class="QLabel" name="lbl_porta_titulo">
+          <property name="text"><string>PORTA COM</string></property>
+          <property name="class" stdset="0"><string>fieldLabel</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="combo_porta"/>
+        </item>
+       </layout>
+      </item>
+
+      <item>
+       <layout class="QHBoxLayout" name="layout_baud_timeout">
+        <property name="spacing"><number>12</number></property>
+        <item>
+         <layout class="QVBoxLayout" name="layout_baud">
+          <property name="spacing"><number>4</number></property>
+          <item>
+           <widget class="QLabel" name="lbl_baud_titulo">
+            <property name="text"><string>BAUD RATE</string></property>
+            <property name="class" stdset="0"><string>fieldLabel</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="combo_baud">
+            <item><property name="text"><string>9600</string></property></item>
+            <item><property name="text"><string>115200</string></property></item>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="layout_timeout">
+          <property name="spacing"><number>4</number></property>
+          <item>
+           <widget class="QLabel" name="lbl_timeout_titulo">
+            <property name="text"><string>TIMEOUT (s)</string></property>
+            <property name="class" stdset="0"><string>fieldLabel</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSpinBox" name="spin_timeout">
+            <property name="minimum"><number>1</number></property>
+            <property name="maximum"><number>60</number></property>
+            <property name="value"><number>1</number></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <spacer name="spacer_meio">
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <property name="sizeHint" stdset="0"><size><width>20</width><height>10</height></size></property>
+    </spacer>
+   </item>
+
+   <!-- ===== Ações ===== -->
+   <item>
+    <layout class="QHBoxLayout" name="layout_acoes">
+     <property name="spacing"><number>10</number></property>
      <item>
-      <layout class="QGridLayout" name="gridLayout" columnstretch="3,10">
-       <property name="leftMargin">
-        <number>0</number>
-       </property>
-       <property name="topMargin">
-        <number>0</number>
-       </property>
-       <property name="rightMargin">
-        <number>2</number>
-       </property>
-       <property name="bottomMargin">
-        <number>2</number>
-       </property>
-       <property name="horizontalSpacing">
-        <number>2</number>
-       </property>
-       <property name="verticalSpacing">
-        <number>0</number>
-       </property>
-       <item row="5" column="0">
-        <widget class="QLabel" name="label_4">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="text">
-          <string>Timeout (s):</string>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="1">
-        <widget class="QSpinBox" name="spin_timeout">
-         <property name="value">
-          <number>1</number>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="1">
-        <widget class="QComboBox" name="combo_porta">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="1">
-        <widget class="QComboBox" name="combo_baud">
-         <item>
-          <property name="text">
-           <string>9600</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>115200</string>
-          </property>
-         </item>
-        </widget>
-       </item>
-       <item row="3" column="0">
-        <widget class="QLabel" name="label_3">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="text">
-          <string>Baud Rate:</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="0">
-        <widget class="QLabel" name="label">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="text">
-          <string>Porta COM:</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </item>
-     <item>
-      <widget class="QLabel" name="lbl_status">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-         <horstretch>5</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="text">
-        <string>Status : Desconectado</string>
-       </property>
+      <widget class="QPushButton" name="btn_fechar">
+       <property name="text"><string>Fechar</string></property>
       </widget>
      </item>
      <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_6">
-       <item>
-        <widget class="QPushButton" name="btn_desconectar">
-         <property name="text">
-          <string>Desconectar</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btn_conectar">
-         <property name="text">
-          <string>Conectar</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
+      <spacer name="spacer_acoes">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_desconectar">
+       <property name="minimumSize"><size><width>130</width><height>40</height></size></property>
+       <property name="text"><string>Desconectar</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_conectar">
+       <property name="minimumSize"><size><width>130</width><height>40</height></size></property>
+       <property name="text"><string>Conectar</string></property>
+      </widget>
      </item>
     </layout>
-   </widget>
-  </widget>
+   </item>
+
+  </layout>
  </widget>
  <resources/>
  <connections/>
