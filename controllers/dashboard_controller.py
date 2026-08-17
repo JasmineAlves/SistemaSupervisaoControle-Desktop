@@ -9,6 +9,7 @@ from models.registro import Registro # Evento registrado no sistema
 from models.simulacao import Simulador
 from controllers.comunicacao_controller import ComunicacaoController
 from controllers.configuracao_controller import ConfiguracaoController
+from models.configuracao import Configuracao
 
 # Classe principal
 class DashController(QMainWindow):
@@ -37,8 +38,15 @@ class DashController(QMainWindow):
 
         self.simulador = Simulador()
 
-        # Guarda as medições utilizadas no gráfico
+        # Guarda os dados do gráfico das últimas 24 horas
         self.historico_potencia = []
+
+        # Guarda somente os dados usados no tempo real
+        self.historico_tempo_real = []
+
+        # Intervalo dos pontos do histórico de 24 horas
+        # Um ponto a cada 30 minutos evita acumular centenas de pontos no canto.
+        self.intervalo_historico = timedelta(minutes=30)
 
         # Controla se o gráfico acompanha em tempo real a última medição
         self.modo_tempo_real = False
@@ -50,7 +58,6 @@ class DashController(QMainWindow):
         self.disjuntor_anterior = self.medicao_atual.disjuntor
 
         # Guarda se o limite de potência já foi ultrapassado
-        # Se a potência estava anteriormente acima do limite, evita registrar alerta a cada segundo
         self.limite_ultrapassado = False
 
         # Se a potência ultrapassar o limite configurado por esse fator, disjuntor dispara sozinho
@@ -84,6 +91,15 @@ class DashController(QMainWindow):
         # Att a telemetria a cada 1s
         self.timer.start(1000)
 
+        # Modelo compartilhado de configuração (carrega do arquivo na inicialização)
+        self.model_config = Configuracao()
+        self.ui.spin_limite_potencia.setValue(self.model_config.lim_potencia)
+
+        # Limite efetivamente aplicado à proteção.
+        # O valor digitado fica pendente até o usuário clicar em OK.
+        self.limite_potencia_aplicado = self.model_config.lim_potencia
+        self.limite_potencia_pendente = False
+
         # Guarda o estado do corte de emergência
         self.corte_emergencia_ativo = False
         # Controla o corte de emergência
@@ -93,11 +109,9 @@ class DashController(QMainWindow):
             self.alternar_tempo_real
         )
 
-        # Guarda o limite anterior para registrar alterações
-        self.limite_anterior = self.ui.spin_limite_potencia.value()
-
-        # Verifica o limite quando ele é alterado
-        self.ui.spin_limite_potencia.valueChanged.connect(self.verificar_limite)
+        # Alterações no campo ficam pendentes até clicar em OK.
+        self.ui.spin_limite_potencia.valueChanged.connect(self.marcar_limite_pendente)
+        self.ui.btn_ok_limite.clicked.connect(self.confirmar_limite_potencia)
 
         # Guarda instância do controller de comunicação
         self.comunicacao_controller = ComunicacaoController(self)
@@ -195,7 +209,7 @@ class DashController(QMainWindow):
         self.grafico.setBackground("w")
 
         self.grafico.setTitle(
-            "Demanda de potência - Últimas 24 horas",
+            "Demanda de potência",
             color="#24343B",
             size="12pt"
         )
@@ -240,13 +254,23 @@ class DashController(QMainWindow):
             "bottom": eixo_tempo
         })
 
-        # Cria a curva de potência
+        # Curva do histórico das últimas 24 horas
         self.curva_potencia = self.grafico.plot(
             pen=pg.mkPen(
                 color="#245A63",
                 width=2
             )
         )
+
+        # Curva exclusiva do modo Tempo Real.
+        # Não compartilha os pontos do histórico de 24 horas.
+        self.curva_tempo_real = self.grafico.plot(
+            pen=pg.mkPen(
+                color="#B07A00",
+                width=2
+            )
+        )
+        self.curva_tempo_real.setVisible(False)
 
     def carregar_historico_inicial(self):
         # Cria dados simulados das últimas 24 horas
@@ -288,35 +312,36 @@ class DashController(QMainWindow):
         self.atualizar_grafico()
 
     def atualizar_grafico(self):
-        # Atualiza a curva de demanda de potência
+        # Atualiza o gráfico de acordo com o modo selecionado.
 
-        if not self.historico_potencia:
-            return
-
-        # Pega os valores de potência
-        valores = [
-            item["potencia"]
-            for item in self.historico_potencia
-        ]
-
-        # Pega os horários das medições
-        tempos = [
-            item["timestamp"].timestamp()
-            for item in self.historico_potencia
-        ]
-
-        # Atualiza os dados da curva
-        self.curva_potencia.setData(
-            tempos,
-            valores
-        )
-
-        # tempo real
         if self.modo_tempo_real:
+            # ==========================================================
+            # MODO TEMPO REAL
+            # ==========================================================
+
+            if not self.historico_tempo_real:
+                return
+
+            valores = [
+                item["potencia"]
+                for item in self.historico_tempo_real
+            ]
+
+            tempos = [
+                item["timestamp"].timestamp()
+                for item in self.historico_tempo_real
+            ]
+
+            # curva em tempo real
+            self.curva_potencia.setVisible(False)
+            self.curva_tempo_real.setVisible(True)
+
+            self.curva_tempo_real.setData(
+                tempos,
+                valores
+            )
 
             ultimo_tempo = tempos[-1]
-
-            # Mostra os últimos 60 segundos
             inicio = ultimo_tempo - 60
 
             self.grafico.setXRange(
@@ -325,40 +350,63 @@ class DashController(QMainWindow):
                 padding=0
             )
 
-        # 24 horas
         else:
+            # 24h
+            if not self.historico_potencia:
+                return
 
-            agora = datetime.now()
+            valores = [
+                item["potencia"]
+                for item in self.historico_potencia
+            ]
 
-            inicio = agora - timedelta(hours=24)
+            tempos = [
+                item["timestamp"].timestamp()
+                for item in self.historico_potencia
+            ]
 
-            self.grafico.setXRange(
-                inicio.timestamp(),
-                agora.timestamp(),
-                padding=0
+            # Mostra o histórico de 24 horas
+            self.curva_tempo_real.setVisible(False)
+            self.curva_potencia.setVisible(True)
+
+            self.curva_potencia.setData(
+                tempos,
+                valores
             )
 
-        '''
-        # Mantém o gráfico mostrando as últimas 24 horas
-        agora = datetime.now()
-        inicio = agora - timedelta(hours=24)
+            # Mantém a janela das 24 horas estável
+            if self.historico_potencia:
+                fim = self.historico_potencia[-1]["timestamp"]
+                inicio = fim - timedelta(hours=24)
 
-        self.grafico.setXRange(
-            inicio.timestamp(),
-            agora.timestamp(),
-            padding=0
-        )
-        '''
+                self.grafico.setXRange(
+                    inicio.timestamp(),
+                    fim.timestamp(),
+                    padding=0
+                )
 
     def alternar_tempo_real(self):
         self.modo_tempo_real = not self.modo_tempo_real
 
         if self.modo_tempo_real:
             self.ui.btn_tempo_real.setText("Tempo Real")
-            # Volta imediatamente para a última medição
+
+            # Começa uma série nova somente para o tempo real 
+            self.historico_tempo_real = [
+                {
+                    "timestamp": self.medicao_atual.timestamp,
+                    "potencia": self.medicao_atual.potencia
+                }
+            ]
+
             self.atualizar_grafico()
+
         else:
             self.ui.btn_tempo_real.setText("24 Horas")
+
+            # Ao voltar para 24 horas, o gráfico usa somente
+            # os pontos históricos de 30 em 30 minutos.
+            self.atualizar_grafico()
 
     # Chegada de uma nova simulação
     def atualizar_medicao(self):
@@ -367,15 +415,31 @@ class DashController(QMainWindow):
         # Gera uma nova medição simulada
         self.medicao_atual = self.simulador.gerar_medicao()
 
-        # Adiciona a nova potência ao histórico
-        self.historico_potencia.append(
-            {
-                "timestamp": self.medicao_atual.timestamp,
-                "potencia": self.medicao_atual.potencia
-            }
-        )
 
-        # Mantém somente as medições das últimas 24h
+        # 24h
+        # O último ponto mantém seu horário original e só é criado um novo ponto quando completar 30 minutos.
+        if not self.historico_potencia:
+            self.historico_potencia.append(
+                {
+                    "timestamp": self.medicao_atual.timestamp,
+                    "potencia": self.medicao_atual.potencia
+                }
+            )
+        else:
+            ultimo = self.historico_potencia[-1]
+
+            if (
+                self.medicao_atual.timestamp - ultimo["timestamp"]
+                >= self.intervalo_historico
+            ):
+                self.historico_potencia.append(
+                    {
+                        "timestamp": self.medicao_atual.timestamp,
+                        "potencia": self.medicao_atual.potencia
+                    }
+                )
+
+        # Mantém somente as medições das últimas 24 horas
         limite = datetime.now() - timedelta(hours=24)
 
         self.historico_potencia = [
@@ -384,6 +448,26 @@ class DashController(QMainWindow):
             if item["timestamp"] >= limite
         ]
 
+        # Tempo real
+        # Só acumula pontos quando o modo Tempo Real estiver ativo
+        if self.modo_tempo_real:
+            self.historico_tempo_real.append(
+                {
+                    "timestamp": self.medicao_atual.timestamp,
+                    "potencia": self.medicao_atual.potencia
+                }
+            )
+
+            # Mantém somente os últimos 60 segundos.
+            limite_tempo_real = (
+                self.medicao_atual.timestamp - timedelta(seconds=60)
+            )
+
+            self.historico_tempo_real = [
+                item
+                for item in self.historico_tempo_real
+                if item["timestamp"] >= limite_tempo_real
+            ]
 
         # Simula a ativação automática do disjuntor 
         self.verificar_protecao_sobrecorrente()
@@ -457,10 +541,24 @@ class DashController(QMainWindow):
             f"Última atualização: {horario}"
         )
 
+    def marcar_limite_pendente(self):
+        # O valor digitado ainda não foi confirmado.
+        if self.ui.spin_limite_potencia.value() != self.limite_potencia_aplicado:
+            self.limite_potencia_pendente = True
+
+            # Diferencia visualmente o valor pendente.
+            self.ui.spin_limite_potencia.setStyleSheet(
+                "QDoubleSpinBox { color: #B07A00; }"
+            )
+        else:
+            self.limite_potencia_pendente = False
+            self.ui.spin_limite_potencia.setStyleSheet("")
+
     def verificar_limite(self):
         # Verifica o limite usando a medição atual
 
-        limite = self.ui.spin_limite_potencia.value()
+        # Usa somente o limite confirmado.
+        limite = self.limite_potencia_aplicado
 
         ultrapassou_limite = (
             self.medicao_atual.potencia > limite
@@ -476,7 +574,8 @@ class DashController(QMainWindow):
             )
 
     def verificar_protecao_sobrecorrente(self):
-        limite = self.ui.spin_limite_potencia.value()
+        # A proteção nunca usa um valor que ainda está sendo editado.
+        limite = self.limite_potencia_aplicado
 
         sobrecorrente_severa = (
             self.medicao_atual.disjuntor
@@ -536,8 +635,8 @@ class DashController(QMainWindow):
 
             self.disjuntor_anterior = medicao.disjuntor
 
-        # Pega o limite configurado na interface
-        limite = self.ui.spin_limite_potencia.value()
+        # Usa somente o limite efetivamente aplicado.
+        limite = self.limite_potencia_aplicado
 
         ultrapassou_limite = (
             medicao.potencia > limite
@@ -738,19 +837,51 @@ class DashController(QMainWindow):
 
     def abrir_configuracao(self):
         # Exibe a janela modal de configuração de limites (tensão / corrente)
-        dialogo = ConfiguracaoController(self)
+        # Passa o modelo compartilhado para manter os valores do último acesso
+        dialogo = ConfiguracaoController(self, model=self.model_config)
 
         if dialogo.exec() == dialogo.DialogCode.Accepted:
             # Resgata o limite de potência calculado (P = V x I) e aplica no dashboard
-            novo_limite = dialogo.model.lim_potencia
+            novo_limite = self.model_config.lim_potencia
 
             self.ui.spin_limite_potencia.setValue(novo_limite)
+
+            # O OK da configuração aplica efetivamente o novo limite.
+            self.limite_potencia_aplicado = novo_limite
+            self.limite_potencia_pendente = False
+            self.ui.spin_limite_potencia.setStyleSheet("")
 
             self.adicionar_registro(
                 tipo="Comando",
                 descricao=(
-                    f"Limites atualizados: {dialogo.model.lim_tensao:.1f} V / "
-                    f"{dialogo.model.lim_corrente:.1f} A"
+                    f"Limites atualizados: {self.model_config.lim_tensao:.1f} V / "
+                    f"{self.model_config.lim_corrente:.1f} A"
                 ),
                 valor=f"{novo_limite:.1f} W"
             )
+
+    def confirmar_limite_potencia(self):
+        # Confirma o limite digitado no spin da dashboard.
+        novo_limite = self.ui.spin_limite_potencia.value()
+
+        # Salva o novo limite no modelo.
+        self.model_config.atualizar_limite_potencia_manual(novo_limite)
+
+        # Só agora o valor passa a valer para a proteção e para os alertas.
+        self.limite_potencia_aplicado = novo_limite
+        self.limite_potencia_pendente = False
+
+        # Volta a cor normal depois da confirmação.
+        self.ui.spin_limite_potencia.setStyleSheet("")
+
+        # Atualiza o estado do alerta com o novo limite confirmado.
+        self.limite_ultrapassado = (
+            self.medicao_atual.potencia > self.limite_potencia_aplicado
+        )
+        self.verificar_limite()
+
+        self.adicionar_registro(
+            tipo="Comando",
+            descricao="Limite de potência alterado manualmente na dashboard.",
+            valor=f"{novo_limite:.1f} W"
+        )

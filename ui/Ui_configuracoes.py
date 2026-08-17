@@ -265,6 +265,12 @@ class Ui_Dialog(object):
 
         self.layout_previsao_texto.addWidget(self.lbl_potencia_calculada)
 
+        self.lbl_aviso_manual = QLabel(self.previsaoCard)
+        self.lbl_aviso_manual.setObjectName(u"lbl_aviso_manual")
+        self.lbl_aviso_manual.setWordWrap(True)
+
+        self.layout_previsao_texto.addWidget(self.lbl_aviso_manual)
+
 
         self.layout_previsao.addLayout(self.layout_previsao_texto)
 
@@ -322,6 +328,8 @@ class Ui_Dialog(object):
         self.spin_corrente_max.setSuffix(QCoreApplication.translate("Dialog", u" A", None))
         self.lbl_previsao_titulo.setText(QCoreApplication.translate("Dialog", u"LIMITE DE POT\u00caNCIA RESULTANTE (P = V \u00d7 I)", None))
         self.lbl_potencia_calculada.setText(QCoreApplication.translate("Dialog", u"2400.0 W", None))
+        self.lbl_aviso_manual.setText("")
+        self.lbl_aviso_manual.setStyleSheet(QCoreApplication.translate("Dialog", u"color: #EA580C; font-size: 10px; font-weight: 600;", None))
         self.btn_cancelar.setText(QCoreApplication.translate("Dialog", u"Cancelar", None))
         self.btn_salvar.setText(QCoreApplication.translate("Dialog", u"Salvar", None))
     # retranslateUi

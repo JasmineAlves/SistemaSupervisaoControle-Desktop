@@ -30,6 +30,14 @@ class ConfiguracaoController(QDialog):
         self.ui.spin_tensao_max.setValue(dados["tensao_max"])
         self.atualizar_previa_potencia()
 
+        # Avisa se o limite de potência foi alterado manualmente pela dash
+        if self.model.foi_alterado_manualmente:
+            self.ui.lbl_aviso_manual.setText(
+                "Limite alterado manualmente na dashboard. Salvar irá recalcular por V × I configurados."
+            )
+        else:
+            self.ui.lbl_aviso_manual.setText("")
+
     def atualizar_previa_potencia(self):
         # Recalcula a prévia exibida sempre que tensão ou corrente mudam
         potencia = self.ui.spin_tensao_max.value() * self.ui.spin_corrente_max.value()

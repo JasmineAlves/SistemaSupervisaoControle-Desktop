@@ -612,13 +612,25 @@ class Ui_MainWindow(object):
 
         self.layout_limite.addWidget(self.lbl_limite_titulo)
 
+        self.layout_limite_input = QHBoxLayout()
+        self.layout_limite_input.setSpacing(6)
+        self.layout_limite_input.setObjectName(u"layout_limite_input")
         self.spin_limite_potencia = QDoubleSpinBox(self.controlePanel)
         self.spin_limite_potencia.setObjectName(u"spin_limite_potencia")
         self.spin_limite_potencia.setMinimum(0.000000000000000)
         self.spin_limite_potencia.setMaximum(999999.000000000000000)
         self.spin_limite_potencia.setValue(2000.000000000000000)
 
-        self.layout_limite.addWidget(self.spin_limite_potencia)
+        self.layout_limite_input.addWidget(self.spin_limite_potencia)
+
+        self.btn_ok_limite = QPushButton(self.controlePanel)
+        self.btn_ok_limite.setObjectName(u"btn_ok_limite")
+        self.btn_ok_limite.setMinimumSize(QSize(42, 28))
+
+        self.layout_limite_input.addWidget(self.btn_ok_limite)
+
+
+        self.layout_limite.addLayout(self.layout_limite_input)
 
 
         self.layout_controles.addLayout(self.layout_limite)
@@ -756,14 +768,14 @@ class Ui_MainWindow(object):
         self.lbl_subtitulo.setText(QCoreApplication.translate("MainWindow", u"Monitor de Consumo e Qualidade de Energia - Smart Grid", None))
         self.lbl_status_comunicacao.setText(QCoreApplication.translate("MainWindow", u"Comunica\u00e7\u00e3o: DESCONECTADO", None))
         self.grupo_tensao.setProperty(u"class", QCoreApplication.translate("MainWindow", u"metricCard", None))
-        self.lbl_tensao_titulo.setText(QCoreApplication.translate("MainWindow", u"TENS\u00c3O RMS", None))
+        self.lbl_tensao_titulo.setText(QCoreApplication.translate("MainWindow", u"TENS\u00c3O", None))
         self.lbl_tensao_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"metricTitle", None))
         self.lbl_valor_tensao.setText(QCoreApplication.translate("MainWindow", u"0.0", None))
         self.lbl_valor_tensao.setProperty(u"class", QCoreApplication.translate("MainWindow", u"metricValue", None))
         self.lbl_tensao_unidade.setText(QCoreApplication.translate("MainWindow", u"V", None))
         self.lbl_tensao_unidade.setProperty(u"class", QCoreApplication.translate("MainWindow", u"metricUnit", None))
         self.grupo_corrente.setProperty(u"class", QCoreApplication.translate("MainWindow", u"metricCard", None))
-        self.lbl_corrente_titulo.setText(QCoreApplication.translate("MainWindow", u"CORRENTE RMS", None))
+        self.lbl_corrente_titulo.setText(QCoreApplication.translate("MainWindow", u"CORRENTE", None))
         self.lbl_corrente_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"metricTitle", None))
         self.lbl_valor_corrente.setText(QCoreApplication.translate("MainWindow", u"0.0", None))
         self.lbl_valor_corrente.setProperty(u"class", QCoreApplication.translate("MainWindow", u"metricValue", None))
@@ -780,7 +792,7 @@ class Ui_MainWindow(object):
         self.grupo_grafico.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panel", None))
         self.lbl_grafico_titulo.setText(QCoreApplication.translate("MainWindow", u"Curva de demanda de pot\u00eancia", None))
         self.lbl_grafico_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelTitle", None))
-        self.lbl_grafico_subtitulo.setText(QCoreApplication.translate("MainWindow", u"\u00daltimas 24 horas \u00b7 hist\u00f3rico pr\u00e9-carregado", None))
+        self.lbl_grafico_subtitulo.setText(QCoreApplication.translate("MainWindow", u"hist\u00f3rico pr\u00e9-carregado ou em tempo real", None))
         self.lbl_grafico_subtitulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelSubtitle", None))
         self.btn_tempo_real.setText(QCoreApplication.translate("MainWindow", u"Tempo Real", None))
         self.statusCard.setProperty(u"estado", QCoreApplication.translate("MainWindow", u"fechado", None))
@@ -793,6 +805,7 @@ class Ui_MainWindow(object):
         self.lbl_limite_titulo.setText(QCoreApplication.translate("MainWindow", u"LIMITE DE ALERTA DE POT\u00caNCIA", None))
         self.lbl_limite_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"controlTitle", None))
         self.spin_limite_potencia.setSuffix(QCoreApplication.translate("MainWindow", u" W", None))
+        self.btn_ok_limite.setText(QCoreApplication.translate("MainWindow", u"OK", None))
         self.btn_configuracao.setText(QCoreApplication.translate("MainWindow", u"CONFIGURA\u00c7\u00d5ES", None))
         self.btn_comunicacao.setText(QCoreApplication.translate("MainWindow", u"COMUNICA\u00c7\u00c3O", None))
         self.btn_corte_emergencia.setText(QCoreApplication.translate("MainWindow", u"\u26a0  CORTE DE EMERG\u00caNCIA", None))

@@ -273,6 +273,13 @@ QPushButton#btn_cancelar {
           <property name="text"><string>2400.0 W</string></property>
          </widget>
         </item>
+        <item>
+         <widget class="QLabel" name="lbl_aviso_manual">
+          <property name="text"><string></string></property>
+          <property name="wordWrap"><bool>true</bool></property>
+          <property name="styleSheet"><string>color: #EA580C; font-size: 10px; font-weight: 600;</string></property>
+         </widget>
+        </item>
        </layout>
       </item>
       <item>
