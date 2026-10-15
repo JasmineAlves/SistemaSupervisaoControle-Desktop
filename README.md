@@ -18,6 +18,10 @@ Os dados serão apresentados por meio de gráficos, indicadores e informações 
 # Status do projeto -> Em desenvolvimento
 Inicialmente, o sistema utilizará dados simulados para representar o funcionamento da instalação elétrica. A integração com hardware poderá ser realizada futuramente.
 
+## Banco de Dados
+O sistema utiliza SQLite para a persistência local dos dados, sendo que a conexão e a inicialização do banco são centralizadas na classe Database em database/connection.py. O banco de dados é armazenado em data/smartgrid.db e sua estrutura é inicializada automaticamente durante a execução do programa.
 
-
-
+**Tabelas**:
+- dispositivos: Armazena a identificação do dispositivo, seu tipo, estado atual e data da última atualização.
+- historico_eventos: Armazena os eventos registrados pelo sistema, incluindo data e hora, tipo de evento, valor medido, descrição e vínculo opcional com um dispositivo.
+- limites: Armazena os limites máximos de tensão, corrente e potê

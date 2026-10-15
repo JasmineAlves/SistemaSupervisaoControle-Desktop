@@ -1,2 +1,16 @@
 __pycache__/
 *.pyc
+.venv/
+venv/
+env/
+.vscode/
+.idea/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+logs/*.log
+
+# arquivos do so
+.DS_Store
+Thumbs.db
