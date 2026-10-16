@@ -10,6 +10,7 @@ from models.simulacao import Simulador
 from controllers.comunicacao_controller import ComunicacaoController
 from controllers.configuracao_controller import ConfiguracaoController
 from models.configuracao import Configuracao
+from models.registro_repository import RegistroRepository
 
 # Classe principal
 class DashController(QMainWindow):
@@ -73,7 +74,13 @@ class DashController(QMainWindow):
         # Configura a tabela de registros, define tamanho das colunas
         self.configurar_tabela()
 
-        # Registra a inicialização do sistema, adiciona primeiro registro
+        # Recupera eventos salvos no bd antes
+        self.carregar_registros()
+
+        # Att interface p/ exibir eventos recuperados
+        self.atualizar_tabela()
+
+        # Registra evento p/ indicar que sistema iniciou
         self.adicionar_registro(
             tipo="Status",
             descricao="Sistema de supervisão iniciado.",
@@ -671,18 +678,51 @@ class DashController(QMainWindow):
         descricao,
         valor
     ):
-        # Cria um novo registro de evento
-
+        # Cria objeto Registro c/ infos recebidas
         registro = Registro(
             tipo=tipo,
             descricao=descricao,
             valor=valor
         )
-
-        self.registros.append(registro)
-
+        
+        try:
+            id_registro = RegistroRepository.inserir(registro)
+        except Exception as erro:
+            QMessageBox.critical(
+                self,
+                "Erro ao salvar evento",
+                (
+                    "Não foi possível salvar o evento no banco de dados.\n\n"
+                    f"Detalhes: {erro}"
+                )
+            )
+            return
+        
+        # Adiciona o id retornado pelo banco ao objeto do evento
+        registro.id = id_registro
+        # Insere evento no início da lista em memória, com eventos +recentes antes
+        self.registros.insert(0, registro)
         # Att a tabela de histórico
         self.atualizar_tabela()
+
+    def carregar_registros(self):
+        registros_banco = RegistroRepository.listar_todos()
+        # Limpa a lista em memória antes de carregar os registros
+        self.registros = []
+
+        for item in registros_banco:
+            # Cria um objeto Registro com os dados recuperados
+            registro = Registro(
+                tipo=item["tipo_evento"],
+                descricao=item["descricao"],
+                valor=item["valor_medido"]
+            )
+            # Converte texto ISO p/ objeto datetime
+            registro.timestamp = datetime.fromisoformat(
+                item["data_hora"]
+            )
+            # Adiciona o evento à lista em memória
+            self.registros.append(registro)
 
     def atualizar_tabela(self):
         # Atualiza a tabela respeitando o filtro, se estiver ativo
