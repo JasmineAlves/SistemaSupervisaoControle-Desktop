@@ -1,6 +1,10 @@
-# Limites/parâmetros do sistema
+# Limites/parâmetros do sistema e importa logging
 import json
 import os
+import logging
+
+# Cria o logger do módulo
+logger = logging.getLogger(__name__)
 
 class Configuracao:
 
@@ -60,8 +64,9 @@ class Configuracao:
                     "lim_potencia": self.lim_potencia,
                     "foi_alterado_manualmente": self.foi_alterado_manualmente
                 }, f, indent=2)
-        except Exception as e:
-            print(f"Erro ao salvar configuração: {e}")
+        except (OSError, TypeError, ValueError):
+            # Registra a falha ao salvar a configuração
+            logger.exception("Erro ao salvar config/parametros.json")
 
     def _carregar(self):
         try:
@@ -72,5 +77,6 @@ class Configuracao:
                 self.lim_corrente = dados.get("lim_corrente", self.lim_corrente)
                 self.lim_potencia = dados.get("lim_potencia", self.lim_potencia)
                 self.foi_alterado_manualmente = dados.get("foi_alterado_manualmente", False)
-        except Exception as e:
-            print(f"Erro ao carregar configuração: {e}")
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            # Registra a falha ao carregar a configuração
+            logger.exception("Erro ao carregar config/parametros.json")
