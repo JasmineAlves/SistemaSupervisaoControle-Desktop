@@ -134,78 +134,108 @@ class DashController(QMainWindow):
         self.ui.btn_limpar_filtro.clicked.connect(self.limpar_filtro_data)
 
 
+    # Monta evento com medição atual antes de alterar o simulador
+    def executar_corte(self, aberto, tipo, descricao):
+        registro = Registro(
+            tipo=tipo,
+            descricao=descricao,
+            valor=self.formatar_medicao()
+        )
+        try:
+            # Att disjuntor e salva o evento
+            id_registro = RegistroRepository.registrar_corte(
+                aberto=aberto,
+                registro=registro
+            )
+        except Exception as erro:
+            # Informa a falha sem modificar o estado do simulador
+            QMessageBox.critical(
+                self,
+                "Erro ao alterar disjuntor",
+                (
+                    "A operação não foi concluída e as alterações no banco "
+                    "foram revertidas, quando aplicável.\n\n"
+                    f"Detalhes: {erro}"
+                )
+            )
+            return False
+
+        # Guarda o id gerado pelo bd no objeto do evento
+        registro.id = id_registro
+        # Att lista em memória
+        self.registros.insert(0, registro)
+        self.atualizar_tabela()
+        return True
+
+    # Confirma corte/reativação do sistema
     def alternar_corte_emergencia(self):
-        # Confirma o corte ou a reativação do sistema
-
         if not self.corte_emergencia_ativo:
-
+            # Solicita confirmação antes
             resposta = QMessageBox.question(
                 self,
                 "Corte de emergência",
                 "Deseja realizar o corte de emergência?"
             )
+            # Se cancelar, encerra sem alteração
+            if resposta != QMessageBox.StandardButton.Yes:
+                return
 
-            if resposta == QMessageBox.StandardButton.Yes:
+            # Persiste estado + evento antes de mexer no simulador
+            sucesso = self.executar_corte(
+                aberto=True,
+                tipo="Alerta",
+                descricao="Corte de emergência acionado."
+            )
+            # Se falhar, mantém interface/simulador
+            if not sucesso:
+                return
 
-                # Atualiza o estado do disjuntor no simulador
-                self.simulador.alterar_disjuntor(False)
-
-                # Gera uma nova medição imediatamente, refletindo o corte
-                self.medicao_atual = self.simulador.gerar_medicao()
-                self.disjuntor_anterior = self.medicao_atual.disjuntor
-
-                # Atualiza o estado do corte
-                self.corte_emergencia_ativo = True
-
-                # Registra o corte
-                self.adicionar_registro(
-                    tipo="Alerta",
-                    descricao="Corte de emergência acionado.",
-                    valor=self.formatar_medicao()
-                )
-
-                # Atualiza a interface
-                self.atualizar_dashboard()
-
-                # Altera o texto do botão
-                self.ui.btn_corte_emergencia.setText(
-                    "▶  REATIVAR SISTEMA"
-                )
+            # Att o simulador após confirmação
+            self.simulador.alterar_disjuntor(False)
+            # Gera medição = instalação desenergizada
+            self.medicao_atual = self.simulador.gerar_medicao()
+            # Sincroniza o estado anterior (evita registro duplicado)
+            self.disjuntor_anterior = self.medicao_atual.disjuntor
+            # Att indicador de corte de emergência
+            self.corte_emergencia_ativo = True
+            self.atualizar_dashboard()
+            # Altera o botão para permitir a reativação
+            self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
 
         else:
-
+            # Solicita confirmação antes
             resposta = QMessageBox.question(
                 self,
                 "Reativar sistema",
                 "Deseja reativar o sistema?"
             )
+            # Se cancelar, encerra sem alteração
+            if resposta != QMessageBox.StandardButton.Yes:
+                return
 
-            if resposta == QMessageBox.StandardButton.Yes:
+            # Persiste estado + evento antes de mexer no simulador
+            sucesso = self.executar_corte(
+                aberto=False,
+                tipo="Status",
+                descricao="Sistema reativado após corte de emergência."
+            )
+            # Se falhar, mantém interface/simulador
+            if not sucesso:
+                return
 
-                # Religa o estado do disjuntor no simulador
-                self.simulador.alterar_disjuntor(True)
 
-                # Gera uma nova medição imediatamente, refletindo a religação
-                self.medicao_atual = self.simulador.gerar_medicao()
-                self.disjuntor_anterior = self.medicao_atual.disjuntor
+            # Att o simulador após confirmação
+            self.simulador.alterar_disjuntor(True)
+            # Gera medição = instalação energizada
+            self.medicao_atual = self.simulador.gerar_medicao()
+            # Sincroniza o estado anterior (evita registro duplicado)
+            self.disjuntor_anterior = self.medicao_atual.disjuntor
+            # Att indicador de corte de emergência
+            self.corte_emergencia_ativo = False
+            self.atualizar_dashboard()
+            # Restaura o texto original do botão
+            self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
 
-                # Atualiza o estado do corte
-                self.corte_emergencia_ativo = False
-
-                # Registra a reativação
-                self.adicionar_registro(
-                    tipo="Status",
-                    descricao="Sistema reativado após corte de emergência.",
-                    valor=self.formatar_medicao()
-                )
-
-                # Atualiza a interface
-                self.atualizar_dashboard()
-
-                # Altera o texto do botão
-                self.ui.btn_corte_emergencia.setText(
-                    "⚠  CORTE DE EMERGÊNCIA"
-                ) 
 
     # Cria e configura gráfico
     def configurar_grafico(self):
