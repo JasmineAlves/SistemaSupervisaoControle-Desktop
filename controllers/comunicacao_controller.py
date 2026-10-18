@@ -16,6 +16,7 @@ class ComunicacaoController(QDialog):
 
         self.configurar_sinais()
         self.carregar_portas_com()
+        self.carregar_configuracao_salva()
         self.atualizar_interface()
 
     def configurar_sinais(self):
@@ -108,3 +109,29 @@ class ComunicacaoController(QDialog):
             self.atualizar_status(self.model.obter_status(), conectado=True)
         else:
             self.atualizar_status(self.model.obter_status(), conectado=False)
+
+
+    def carregar_configuracao_salva(self):
+        # Recupera parâmetros persistidos
+        parametros = self.model.configuracao.obter_configuracao_comunicacao()
+
+        porta_salva = parametros["porta_serial"]
+        baud_rate_salvo = parametros["baud_rate"]
+        timeout_salvo = parametros["timeout_serial"]
+
+        # Restaura porta selecionada
+        if porta_salva:
+            indice_porta = self.ui.combo_porta.findText(porta_salva)
+            if indice_porta < 0:
+                self.ui.combo_porta.addItem(porta_salva)
+                indice_porta = self.ui.combo_porta.findText(porta_salva)
+
+            self.ui.combo_porta.setCurrentIndex(indice_porta)
+
+        # Restaura baudrate
+        indice_baud = self.ui.combo_baud.findText(baud_rate_salvo)
+
+        if indice_baud >= 0:
+            self.ui.combo_baud.setCurrentIndex(indice_baud)
+        # Restaura timeout salvo
+        self.ui.spin_timeout.setValue(timeout_salvo)

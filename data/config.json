@@ -1,6 +1,9 @@
 {
-  "lim_tensao": 100.0,
+  "lim_tensao": 120.0,
   "lim_corrente": 90.0,
-  "lim_potencia": 9000.0,
-  "foi_alterado_manualmente": false
+  "lim_potencia": 10800.0,
+  "foi_alterado_manualmente": false,
+  "porta_serial": "/dev/ttyS12",
+  "baud_rate": "115200",
+  "timeout_serial": 2.0
 }
