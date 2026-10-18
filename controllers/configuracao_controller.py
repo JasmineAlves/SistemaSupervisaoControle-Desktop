@@ -1,7 +1,10 @@
 # Controle da configuração do sistema
+import logging
 from PySide6.QtWidgets import QDialog, QMessageBox
 from ui.Ui_configuracoes import Ui_Dialog
 from models.configuracao import Configuracao
+
+logger = logging.getLogger(__name__)
 
 class ConfiguracaoController(QDialog):
     def __init__(self, parent=None, model=None):
@@ -47,16 +50,36 @@ class ConfiguracaoController(QDialog):
         corrente = self.ui.spin_corrente_max.value()
         tensao = self.ui.spin_tensao_max.value()
 
-        # Envia os dados atualizados para o Model tratar e validar
-        sucesso = self.model.atualizar_limites(tensao=tensao, corrente=corrente)
-
-        if sucesso:
-            self.accept()
-        else:
+        # Valida limites
+        if tensao < 0 or corrente < 0:
             QMessageBox.warning(
-                self, 
-                "Erro de Validação", 
+                self,
+                "Erro de validação",
                 "Os valores de tensão e corrente devem ser maiores ou iguais a zero."
+            )
+            return
+
+        try:
+            # Salva os limites pelo modelo
+            sucesso = self.model.atualizar_limites(
+                tensao=tensao,
+                corrente=corrente
+            )
+            if sucesso:
+                self.accept()
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Erro de validação",
+                    "Não foi possível salvar os limites informados."
+                )
+        except Exception:
+            # Registra a falha e informa o usuário
+            logger.exception("Erro ao salvar os limites de segurança")
+            QMessageBox.critical(
+                self,
+                "Erro ao salvar",
+                "Não foi possível salvar os limites. Verifique o log para mais detalhes."
             )
 
     def ao_cancelar(self):

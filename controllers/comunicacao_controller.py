@@ -1,7 +1,9 @@
-from PySide6.QtWidgets import QDialog
+import logging
 from ui.Ui_comunicacao import Ui_Form
 from models.comunicacao import ComunicacaoModel
+from PySide6.QtWidgets import QDialog, QMessageBox
 
+logger = logging.getLogger(__name__)
 
 class ComunicacaoController(QDialog):
     def __init__(self, parent=None, model=None):
@@ -23,7 +25,8 @@ class ComunicacaoController(QDialog):
 
     def carregar_portas_com(self):
         self.ui.combo_porta.clear()
-        
+
+        # portas = [] > usada pra testar ausência de portas
         portas = self.model.listar_portas()
 
         if portas:
@@ -36,13 +39,40 @@ class ComunicacaoController(QDialog):
         baud_rate = self.ui.combo_baud.currentText()
         timeout = self.ui.spin_timeout.value()
 
-        sucesso = self.model.conectar(porta, baud_rate, timeout)
+        # Impede conexão sem porta valida
+        if not porta or porta == "Nenhuma porta encontrada":
+            QMessageBox.warning(
+                self,
+                "Porta inválida",
+                "Selecione uma porta de comunicação válida."
+            )
+            return
 
-        if sucesso:
-            self.atualizar_status(self.model.obter_status(), conectado=True)
-            self.atualizar_interface()
-        else:
-            self.atualizar_status("Status : Erro - Nenhuma porta selecionada", conectado=False)
+        try:
+            sucesso = self.model.conectar(porta, baud_rate, timeout)
+            if sucesso:
+                self.atualizar_status(
+                    self.model.obter_status(),
+                    conectado=True
+                )
+                self.atualizar_interface()
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Falha na conexão",
+                    "Não foi possível estabelecer a comunicação."
+                )
+                self.atualizar_status(
+                    "Status: desconectado",
+                    conectado=False
+                )
+        except Exception:
+            logger.exception("Erro ao conectar à porta de comunicação")
+            QMessageBox.critical(
+                self,
+                "Erro de comunicação",
+                "Ocorreu um erro ao tentar conectar. Consulte o log."
+            )
 
     def ao_desconectar(self):
         self.model.desconectar()

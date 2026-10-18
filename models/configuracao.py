@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class Configuracao:
 
-    _ARQUIVO = "config/parametros.json"
+    _ARQUIVO = "data/config.json"
 
     def __init__(self, lim_v=0.0, lim_i=0.0, lim_p=0.0):
         self.lim_tensao = lim_v
@@ -56,7 +56,7 @@ class Configuracao:
 
     def _salvar(self):
         try:
-            os.makedirs("config", exist_ok=True)
+            os.makedirs(os.path.dirname(self._ARQUIVO), exist_ok=True)
             with open(self._ARQUIVO, "w", encoding="utf-8") as f:
                 json.dump({
                     "lim_tensao": self.lim_tensao,
@@ -66,7 +66,7 @@ class Configuracao:
                 }, f, indent=2)
         except (OSError, TypeError, ValueError):
             # Registra a falha ao salvar a configuração
-            logger.exception("Erro ao salvar config/parametros.json")
+            logger.exception("Erro ao salvar data/config.json")
 
     def _carregar(self):
         try:
@@ -79,4 +79,4 @@ class Configuracao:
                 self.foi_alterado_manualmente = dados.get("foi_alterado_manualmente", False)
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             # Registra a falha ao carregar a configuração
-            logger.exception("Erro ao carregar config/parametros.json")
+            logger.exception("Erro ao carregar data/config.json")
