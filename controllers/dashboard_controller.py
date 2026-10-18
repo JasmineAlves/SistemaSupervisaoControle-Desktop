@@ -11,6 +11,9 @@ from controllers.comunicacao_controller import ComunicacaoController
 from controllers.configuracao_controller import ConfiguracaoController
 from models.configuracao import Configuracao
 from models.registro_repository import RegistroRepository
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Classe principal
 class DashController(QMainWindow):
@@ -63,7 +66,7 @@ class DashController(QMainWindow):
 
         # Se a potência ultrapassar o limite configurado por esse fator, disjuntor dispara sozinho
         self.fator_sobrecorrente = 1.5
-        self.medicao_no_disparo = None
+        self.medicao_disparo = None
 
         # Configura o gráfico, chama a função que cria o gráfico
         self.configurar_grafico()
@@ -611,21 +614,73 @@ class DashController(QMainWindow):
             )
 
     def verificar_protecao_sobrecorrente(self):
-        # A proteção nunca usa um valor que ainda está sendo editado.
+        # Usa somente o limite de potência confirmado
         limite = self.limite_potencia_aplicado
-
         sobrecorrente_severa = (
             self.medicao_atual.disjuntor
             and limite > 0
             and self.medicao_atual.potencia > limite * self.fator_sobrecorrente
         )
+        if not sobrecorrente_severa:
+            return
 
-        if sobrecorrente_severa:
-            # Guarda a medição que CAUSOU o disparo, antes de zerar
-            self.medicao_no_disparo = self.medicao_atual
+        # Guarda a medição que causou o disparo
+        self.medicao_disparo = self.medicao_atual
+        valor_disparo = self.formatar_medicao_customizada(
+            self.medicao_disparo
+        )
 
-            self.simulador.alterar_disjuntor(False)
-            self.medicao_atual = self.simulador.gerar_medicao()
+        registro = Registro(
+            tipo="Alerta",
+            descricao="Disjuntor aberto espontaneamente / proteção ativada.",
+            valor=valor_disparo
+        )
+
+        try:
+            # Persiste estado do disjuntor e o evento
+            id_registro = RegistroRepository.registrar_corte(
+                aberto=True,
+                registro=registro
+            )
+        except Exception:
+            # Bd reverte a transação em falha
+            logger.exception(
+                "Falha ao persistir o corte automático por sobrecorrente"
+            )
+            QMessageBox.critical(
+                self,
+                "Erro na proteção",
+                (
+                    "Não foi possível registrar o corte automático no banco. "
+                    "O estado do simulador não será alterado.\n\n"
+                    "Consulte logs/smartgrid.log para mais detalhes."
+                )
+            )
+            return
+
+        # Att o histórico em memória
+        registro.id = id_registro
+        self.registros.insert(0, registro)
+        self.atualizar_tabela()
+        # Altera o simulador
+        self.simulador.alterar_disjuntor(False)
+        self.medicao_atual = self.simulador.gerar_medicao()
+        # Evita que verificar_eventos registre o mesmo disparo novamente
+        self.disjuntor_anterior = self.medicao_atual.disjuntor
+        # Sincroniza o estado do botão com o corte automático
+        self.corte_emergencia_ativo = True
+        self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
+
+        # Informa o disparo ao usuário
+        QMessageBox.warning(
+            self,
+            "Proteção Ativada",
+            (
+                "O disjuntor foi aberto automaticamente devido à "
+                "sobrecorrente severa.\n\n"
+                f"Medição no momento do disparo: {valor_disparo}"
+            )
+        )
 
     def verificar_eventos(self):
         # Verifica se aconteceu alguma mudança relevante
@@ -645,8 +700,8 @@ class DashController(QMainWindow):
             else:
                 # Usa a medição guardada no instante do disparo
                 valor_disparo = (
-                    self.formatar_medicao_customizada(self.medicao_no_disparo)
-                    if self.medicao_no_disparo
+                    self.formatar_medicao_customizada(self.medicao_disparo)
+                    if self.medicao_disparo
                     else self.formatar_medicao()
                 )
 
