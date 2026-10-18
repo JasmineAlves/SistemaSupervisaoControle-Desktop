@@ -1,0 +1,6 @@
+{
+  "lim_tensao": 70.0,
+  "lim_corrente": 90.0,
+  "lim_potencia": 6300.0,
+  "foi_alterado_manualmente": false
+}

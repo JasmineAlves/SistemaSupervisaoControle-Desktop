@@ -3,7 +3,7 @@ import sqlite3
 from PySide6.QtWidgets import QApplication, QMessageBox
 from controllers.dashboard_controller import DashController
 from database.connection import Database
-from config.logging_config import configurar_logging
+from logs.logging_config import configurar_logging
 import logging
 
 def main():
