@@ -8,16 +8,16 @@ class LimitesRepository:
         conn = Database.get_connection()
         try:
             # Consulta os limites armazenados
-            resultado = conn.execute(
+            return conn.execute(
                 """
                 SELECT tensao_max, corrente_max, potencia_max
                 FROM limites
-                WHERE id = 1
-                """
+                WHERE id = ?
+                """,
+                (1,)
             ).fetchone()
-            # 'fetchone()' = retorna apenas uma linha
+             # 'fetchone()' = retorna apenas uma linha
             # Retorna os limites encontrados ou None
-            return resultado
         finally:
             conn.close()
 
@@ -27,20 +27,18 @@ class LimitesRepository:
         try:
             # Att os limites
             with conn:
-                cursor = conn.execute(
+                conn.execute(
                     """
-                    UPDATE limites
-                    SET tensao_max = ?,
-                        corrente_max = ?,
-                        potencia_max = ?
-                    WHERE id = 1
-                    """,
-                    (tensao, corrente, potencia)
-                )
-                # Informa se o registro não existe
-                if cursor.rowcount != 1:
-                    raise RuntimeError(
-                        "Não foi possível atualizar os limites de segurança."
+                    INSERT INTO limites (
+                        id, tensao_max, corrente_max, potencia_max
                     )
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        tensao_max = excluded.tensao_max,
+                        corrente_max = excluded.corrente_max,
+                        potencia_max = excluded.potencia_max
+                    """,
+                    (1, tensao, corrente, potencia)
+                )
         finally:
             conn.close()

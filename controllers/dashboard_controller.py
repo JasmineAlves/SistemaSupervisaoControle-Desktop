@@ -12,6 +12,7 @@ from controllers.configuracao_controller import ConfiguracaoController
 from models.configuracao import Configuracao
 from models.registro_repository import RegistroRepository
 import logging
+from models.limites_repository import LimitesRepository
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +102,28 @@ class DashController(QMainWindow):
         # Att a telemetria a cada 1s
         self.timer.start(1000)
 
-        # Modelo compartilhado de configuração (carrega do arquivo na inicialização)
+        # Carrega os parâmetros de configuração do JSON
         self.model_config = Configuracao()
+
+        # Recupera os limites atuais do SQLite
+        try:
+            limites_salvos = LimitesRepository.obter()
+
+            if limites_salvos is not None:
+                self.model_config.definir_limites_em_memoria(
+                    tensao=limites_salvos["tensao_max"],
+                    corrente=limites_salvos["corrente_max"],
+                    potencia=limites_salvos["potencia_max"],
+                    manual=False
+                )
+        except Exception:
+            logger.exception("Falha ao recuperar os limites de segurança do SQLite")
+            QMessageBox.critical(
+                self,
+                "Erro ao carregar limites",
+                "Não foi possível recuperar os limites de segurança do banco de dados."
+            )
+            raise
         self.ui.spin_limite_potencia.setValue(self.model_config.lim_potencia)
 
         # Limite efetivamente aplicado à proteção.
@@ -1037,51 +1058,69 @@ class DashController(QMainWindow):
                 valor=f"{novo_limite:.1f} W"
             )
 
-    def confirmar_limite_potencia(self):
-        # Confirma o limite digitado no spin da dashboard.
-        novo_limite = self.ui.spin_limite_potencia.value()
 
-        # Salva e valida antes de aplicar o limite
-        try:
-            sucesso = self.model_config.atualizar_limite_potencia_manual(
+    def confirmar_limite_potencia(self):
+        # Confirma o limite digitado na dashboard
+        novo_limite = self.ui.spin_limite_potencia.value()
+        potencia_anterior = self.limite_potencia_aplicado
+
+        if novo_limite < 0:
+            logger.warning(
+                "Tentativa de configurar limite de potência inválido: %.1f W.",
                 novo_limite
             )
-            if not sucesso:
-                logger.warning(
-                    "Tentativa de configurar limite de potência inválido: %s",
-                    novo_limite
-                )
-                
-                QMessageBox.warning(
-                    self,
-                    "Limite inválido",
-                    "Informe um limite de potência válido e não negativo."
-                )
-                return
+            QMessageBox.warning(
+                self,
+                "Limite inválido",
+                "Informe um limite de potência não negativo."
+            )
+            self.ui.spin_limite_potencia.setValue(potencia_anterior)
+            return
+
+        try:
+            # Salva no SQLite antes de aplicar o novo limite
+            LimitesRepository.salvar(
+                tensao=self.model_config.lim_tensao,
+                corrente=self.model_config.lim_corrente,
+                potencia=novo_limite
+            )
+
         except Exception:
-            logger.exception("Erro ao salvar o limite de potência")
+            logger.exception(
+                "Falha ao persistir o limite manual de potência no SQLite."
+            )
             QMessageBox.critical(
                 self,
                 "Erro ao salvar",
-                "Não foi possível salvar o limite de potência."
+                "Não foi possível salvar o limite de potência. "
+                "O limite anterior continuará aplicado."
             )
+            self.ui.spin_limite_potencia.setValue(potencia_anterior)
             return
-        
-        # Aplica o limite somente depois de salvar com sucesso
-        novo_limite = 0.0 if novo_limite == 0 else novo_limite
-        # Valor passa a valer para a proteção e para os alertas
+
+        # Atualiza o modelo depois da gravação bem-sucedida
+        self.model_config.definir_limites_em_memoria(
+            tensao=self.model_config.lim_tensao,
+            corrente=self.model_config.lim_corrente,
+            potencia=novo_limite,
+            manual=True
+        )
+
+        # Aplica o limite confirmado
         self.limite_potencia_aplicado = novo_limite
         self.limite_potencia_pendente = False
-
-        self.ui.spin_limite_potencia.setValue(novo_limite)
-        # Volta a cor normal depois da confirmação.
         self.ui.spin_limite_potencia.setStyleSheet("")
 
-        # Atualiza o estado do alerta com o novo limite confirmado.
+        # Atualiza o estado do alerta com o limite confirmado
         self.limite_ultrapassado = (
             self.medicao_atual.potencia > self.limite_potencia_aplicado
         )
         self.verificar_limite()
+
+        logger.info(
+            "Limite de potência alterado manualmente e salvo no SQLite: %.1f W.",
+            novo_limite
+        )
 
         self.adicionar_registro(
             tipo="Comando",
