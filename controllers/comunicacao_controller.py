@@ -52,12 +52,24 @@ class ComunicacaoController(QDialog):
         try:
             sucesso = self.model.conectar(porta, baud_rate, timeout)
             if sucesso:
+                logger.info(
+                    "Comunicação iniciada: porta=%s, baud rate=%s, timeout=%.1f s.",
+                    porta,
+                    baud_rate,
+                    timeout
+                )
+
                 self.atualizar_status(
                     self.model.obter_status(),
                     conectado=True
                 )
                 self.atualizar_interface()
             else:
+                logger.warning(
+                    "Falha ao estabelecer comunicação: porta=%s, baud rate=%s.",
+                    porta,
+                    baud_rate
+                )
                 QMessageBox.warning(
                     self,
                     "Falha na conexão",
@@ -77,6 +89,7 @@ class ComunicacaoController(QDialog):
 
     def ao_desconectar(self):
         self.model.desconectar()
+        logger.info("Comunicação desconectada.")
 
         self.atualizar_status(self.model.obter_status(), conectado=False)
         self.carregar_portas_com()

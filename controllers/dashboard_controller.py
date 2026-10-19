@@ -151,8 +151,14 @@ class DashController(QMainWindow):
                 registro=registro
             )
         except Exception as erro:
+            # Registra log no smartgrid.log
+            logger.exception(
+                "Falha na operação de corte emergencial. "
+                "A transação foi revertida quando aplicável: %s",
+                erro
+            )
+
             # Informa a falha sem modificar o estado do simulador
-            logger.exception("Falha na operação de corte emergencial")
             QMessageBox.critical(
                 self,
                 "Erro ao alterar disjuntor",
@@ -166,6 +172,23 @@ class DashController(QMainWindow):
 
         # Guarda o id gerado pelo bd no objeto do evento
         registro.id = id_registro
+
+        # Registra log no smartgrid.log
+        if aberto:
+            logger.warning(
+                "Corte de emergência registrado com sucesso. "
+                "Disjuntor: ABERTO. Tipo: %s. Descrição: %s",
+                tipo,
+                descricao
+            )
+        else:
+            logger.info(
+                "Retomada do sistema registrada com sucesso. "
+                "Disjuntor: FECHADO. Tipo: %s. Descrição: %s",
+                tipo,
+                descricao
+            )
+
         # Att lista em memória
         self.registros.insert(0, registro)
         self.atualizar_tabela()
@@ -643,11 +666,13 @@ class DashController(QMainWindow):
                 aberto=True,
                 registro=registro
             )
-        except Exception:
-            # Bd reverte a transação em falha
+        except Exception as erro:
+            # Registra log no smartgrid.log
             logger.exception(
-                "Falha ao persistir o corte automático por sobrecorrente"
+                "Falha na operação de corte automático. "
+                "A transação foi revertida quando aplicável: %s", erro
             )
+
             QMessageBox.critical(
                 self,
                 "Erro na proteção",
@@ -666,6 +691,17 @@ class DashController(QMainWindow):
         # Altera o simulador
         self.simulador.alterar_disjuntor(False)
         self.medicao_atual = self.simulador.gerar_medicao()
+
+        # Registra log no smartgrid.log
+        logger.warning(
+            "Proteção automática acionada: potência medida=%.1f W, "
+            "limite configurado=%.1f W, fator=%.1f, "
+            "limite de disparo=%.1f W",
+            self.medicao_disparo.potencia,
+            limite,
+            self.fator_sobrecorrente
+        )
+
         # Evita que verificar_eventos registre o mesmo disparo novamente
         self.disjuntor_anterior = self.medicao_atual.disjuntor
         # Sincroniza o estado do botão com o corte automático
@@ -747,9 +783,16 @@ class DashController(QMainWindow):
 
                 # Registra somente quando entra na condição de alerta
         if (
-            ultrapassou_limite
+            ultrapassou_limite  
             and not self.limite_ultrapassado
         ):
+            logger.warning(
+                "Limite de potência ultrapassado: %.1f W "
+                "(Limite configurado: %.1f W).",
+                medicao.potencia,
+                limite
+            )
+                        
             self.adicionar_registro(
                 tipo="Alerta",
                 descricao="Limite de potência ultrapassado.",
@@ -774,6 +817,14 @@ class DashController(QMainWindow):
         try:
             id_registro = RegistroRepository.inserir(registro)
         except Exception as erro:
+            logger.exception(
+                "Falha ao persistir evento no SQLite. "
+                "Tipo=%s, descrição=%s, motivo=%s",
+                tipo,
+                descricao,
+                erro
+            )
+
             QMessageBox.critical(
                 self,
                 "Erro ao salvar evento",
@@ -996,6 +1047,11 @@ class DashController(QMainWindow):
                 novo_limite
             )
             if not sucesso:
+                logger.warning(
+                    "Tentativa de configurar limite de potência inválido: %s",
+                    novo_limite
+                )
+                
                 QMessageBox.warning(
                     self,
                     "Limite inválido",

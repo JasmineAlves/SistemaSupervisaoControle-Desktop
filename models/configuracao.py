@@ -113,6 +113,7 @@ class Configuracao:
             }
             with open(self._ARQUIVO, "w", encoding="utf-8") as arquivo:
                 json.dump(dados, arquivo, indent=2, ensure_ascii=False)
+            logger.info("Configurações salvas com sucesso em data/config.json.")
         except (OSError, TypeError, ValueError):
             # Registra a falha ao salvar a configuração
             logger.exception("Erro ao salvar data/config.json")

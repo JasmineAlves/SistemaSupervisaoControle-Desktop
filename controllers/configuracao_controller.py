@@ -69,9 +69,23 @@ class ConfiguracaoController(QDialog):
                 tensao=tensao,
                 corrente=corrente
             )
+            # Salva no smartgrid.db
             if sucesso:
+                logger.info(
+                    "Limites de segurança atualizados: tensão máxima=%.1f V, "
+                    "corrente máxima=%.1f A.",
+                    tensao,
+                    corrente
+                )
                 self.accept()
             else:
+                # Salva no smartgrid.db
+                logger.warning(
+                    "Tentativa de salvar limites inválidos: tensão=%.1f V, "
+                    "corrente=%.1f A.",
+                    tensao,
+                    corrente
+                )
                 QMessageBox.warning(
                     self,
                     "Erro de validação",

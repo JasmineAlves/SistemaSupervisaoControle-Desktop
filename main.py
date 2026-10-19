@@ -18,6 +18,7 @@ def main():
     try:
         # Inicializa o bd
         Database.init_db()
+        logger.info("Banco de dados SQLite inicializado com sucesso.")
     except sqlite3.Error as erro:
         # Registra o erro de inicialização do banco
         logger.exception("Falha ao inicializar o banco de dados")
