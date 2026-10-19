@@ -13,6 +13,10 @@ class ConfiguracaoController(QDialog):
         self.ui = Ui_Dialog()
         self.ui.setupUi(self)
 
+        # Impede a entrada de limites negativos
+        self.ui.spin_tensao_max.setMinimum(0.0)
+        self.ui.spin_corrente_max.setMinimum(0.0)
+
         # Instancia a classe de Configuração correta
         self.model = model if model else Configuracao()
 

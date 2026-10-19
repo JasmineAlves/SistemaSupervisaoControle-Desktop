@@ -3,6 +3,7 @@ import json
 import os
 import logging
 from pathlib import Path
+import math
 
 # Cria o logger do módulo
 logger = logging.getLogger(__name__)
@@ -25,8 +26,14 @@ class Configuracao:
 
     def atualizar_limites(self, tensao: float, corrente: float) -> bool:
         # Valida e atualiza os limites de operação
+        if not math.isfinite(tensao) or not math.isfinite(corrente):
+            return False
         if tensao < 0 or corrente < 0:
             return False
+
+        # Normaliza zero
+        tensao = 0.0 if tensao == 0 else tensao
+        corrente = 0.0 if corrente == 0 else corrente
 
         self.lim_tensao = tensao
         self.lim_corrente = corrente
@@ -37,8 +44,12 @@ class Configuracao:
 
     def atualizar_limite_potencia_manual(self, potencia: float) -> bool:
         # Atualiza o limite de potência diretamente pela dash (entrada manual)
-        if potencia < 0:
+        if not math.isfinite(potencia) or potencia < 0:
             return False
+
+        # Normaliza zero
+        potencia = 0.0 if potencia == 0 else potencia
+        
         self.lim_potencia = potencia
         self.foi_alterado_manualmente = True
         self._salvar()

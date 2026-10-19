@@ -152,6 +152,7 @@ class DashController(QMainWindow):
             )
         except Exception as erro:
             # Informa a falha sem modificar o estado do simulador
+            logger.exception("Falha na operação de corte emergencial")
             QMessageBox.critical(
                 self,
                 "Erro ao alterar disjuntor",
@@ -618,7 +619,7 @@ class DashController(QMainWindow):
         limite = self.limite_potencia_aplicado
         sobrecorrente_severa = (
             self.medicao_atual.disjuntor
-            and limite > 0
+            and limite >= 0
             and self.medicao_atual.potencia > limite * self.fator_sobrecorrente
         )
         if not sobrecorrente_severa:
@@ -989,13 +990,34 @@ class DashController(QMainWindow):
         # Confirma o limite digitado no spin da dashboard.
         novo_limite = self.ui.spin_limite_potencia.value()
 
-        # Salva o novo limite no modelo.
-        self.model_config.atualizar_limite_potencia_manual(novo_limite)
-
-        # Só agora o valor passa a valer para a proteção e para os alertas.
+        # Salva e valida antes de aplicar o limite
+        try:
+            sucesso = self.model_config.atualizar_limite_potencia_manual(
+                novo_limite
+            )
+            if not sucesso:
+                QMessageBox.warning(
+                    self,
+                    "Limite inválido",
+                    "Informe um limite de potência válido e não negativo."
+                )
+                return
+        except Exception:
+            logger.exception("Erro ao salvar o limite de potência")
+            QMessageBox.critical(
+                self,
+                "Erro ao salvar",
+                "Não foi possível salvar o limite de potência."
+            )
+            return
+        
+        # Aplica o limite somente depois de salvar com sucesso
+        novo_limite = 0.0 if novo_limite == 0 else novo_limite
+        # Valor passa a valer para a proteção e para os alertas
         self.limite_potencia_aplicado = novo_limite
         self.limite_potencia_pendente = False
 
+        self.ui.spin_limite_potencia.setValue(novo_limite)
         # Volta a cor normal depois da confirmação.
         self.ui.spin_limite_potencia.setStyleSheet("")
 
