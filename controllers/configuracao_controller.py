@@ -3,7 +3,6 @@ import logging
 from PySide6.QtWidgets import QDialog, QMessageBox
 from ui.Ui_configuracoes import Ui_Dialog
 from models.configuracao import Configuracao
-from models.limites_repository import LimitesRepository
 
 logger = logging.getLogger(__name__)
 
@@ -54,57 +53,52 @@ class ConfiguracaoController(QDialog):
     def ao_salvar(self):
         corrente = self.ui.spin_corrente_max.value()
         tensao = self.ui.spin_tensao_max.value()
-        potencia = tensao * corrente
 
+        # Valida limites
         if tensao < 0 or corrente < 0:
-            logger.warning(
-                "Tentativa de salvar limites inválidos: tensão=%.1f V, "
-                "corrente=%.1f A.",
-                tensao,
-                corrente
-            )
             QMessageBox.warning(
                 self,
                 "Erro de validação",
-                "Os valores de tensão e corrente devem ser não negativos."
+                "Os valores de tensão e corrente devem ser maiores ou iguais a zero."
             )
             return
 
         try:
-            # Persiste primeiro a fonte principal dos limites
-            LimitesRepository.salvar(
+            # Salva os limites pelo modelo
+            sucesso = self.model.atualizar_limites(
                 tensao=tensao,
-                corrente=corrente,
-                potencia=potencia
+                corrente=corrente
             )
-            # Atualiza o modelo somente após o sucesso no SQLite
-            self.model.definir_limites_em_memoria(
-                tensao=tensao,
-                corrente=corrente,
-                potencia=potencia,
-                manual=False
-            )
+            # Salva no smartgrid.db
+            if sucesso:
+                logger.info(
+                    "Limites de segurança atualizados: tensão máxima=%.1f V, "
+                    "corrente máxima=%.1f A.",
+                    tensao,
+                    corrente
+                )
+                self.accept()
+            else:
+                # Salva no smartgrid.db
+                logger.warning(
+                    "Tentativa de salvar limites inválidos: tensão=%.1f V, "
+                    "corrente=%.1f A.",
+                    tensao,
+                    corrente
+                )
+                QMessageBox.warning(
+                    self,
+                    "Erro de validação",
+                    "Não foi possível salvar os limites informados."
+                )
         except Exception:
-            logger.exception(
-                "Falha ao persistir os limites de segurança no SQLite."
-            )
+            # Registra a falha e informa o usuário
+            logger.exception("Erro ao salvar os limites de segurança")
             QMessageBox.critical(
                 self,
                 "Erro ao salvar",
-                "Não foi possível salvar os limites no banco de dados. "
-                "Os valores anteriores foram mantidos."
+                "Não foi possível salvar os limites. Verifique o log para mais detalhes."
             )
-            return
-        
-        logger.info(
-            "Limites de segurança salvos no SQLite: tensão máxima=%.1f V, "
-            "corrente máxima=%.1f A, potência máxima=%.1f W.",
-            tensao,
-            corrente,
-            potencia
-        )
-        self.accept()
-
 
     def ao_cancelar(self):
         self.reject()

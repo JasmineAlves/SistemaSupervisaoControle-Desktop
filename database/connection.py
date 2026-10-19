@@ -67,5 +67,14 @@ class Database:
                             CHECK (potencia_max >= 0)
                     )
                 """)
+                conn.execute("""
+                    INSERT OR IGNORE INTO limites (
+                        id,
+                        tensao_max,
+                        corrente_max,
+                        potencia_max
+                    )
+                    VALUES (1, 0.0, 0.0, 0.0)
+                """)
         finally:
             conn.close()

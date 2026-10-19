@@ -22,7 +22,6 @@ class Configuracao:
         self.porta_serial = ""
         self.baud_rate = "9600"
         self.timeout_serial = 1.0
-        self.foi_alterado_manualmente = False
         self._carregar()
 
     def atualizar_limites(self, tensao: float, corrente: float) -> bool:
@@ -91,19 +90,6 @@ class Configuracao:
             "corrente_max": self.lim_corrente,
             "potencia_max": self.lim_potencia
         }
-
-    def definir_limites_em_memoria(
-        self,
-        tensao: float,
-        corrente: float,
-        potencia: float,
-        manual: bool = False
-    ):
-        # Atualiza os limites atuais sem gravar o JSON
-        self.lim_tensao = tensao
-        self.lim_corrente = corrente
-        self.lim_potencia = potencia
-        self.foi_alterado_manualmente = manual
 
     def resetar_padrao(self):
         # Redefine os parâmetros para os valores de segurança padrão

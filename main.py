@@ -5,8 +5,6 @@ from controllers.dashboard_controller import DashController
 from database.connection import Database
 from logs.logging_config import configurar_logging
 import logging
-from models.configuracao import Configuracao
-from models.limites_repository import LimitesRepository
 
 def main():
     # Cria a aplicação Qt
@@ -21,21 +19,7 @@ def main():
         # Inicializa o bd
         Database.init_db()
         logger.info("Banco de dados SQLite inicializado com sucesso.")
-
-        # Usa o JSON para inicializar os limites somente se o SQLite ainda não os possui
-        configuracao = Configuracao()
-        limites_salvos = LimitesRepository.obter()
-
-        if limites_salvos is None:
-            LimitesRepository.salvar(
-                tensao=configuracao.lim_tensao,
-                corrente=configuracao.lim_corrente,
-                potencia=configuracao.lim_potencia
-            )
-            logger.info("Limites iniciais carregados do JSON para o SQLite.")
-        else:
-            logger.info("Limites atuais recuperados do SQLite.")
-    except sqlite3.Error as erro:   
+    except sqlite3.Error as erro:
         # Registra o erro de inicialização do banco
         logger.exception("Falha ao inicializar o banco de dados")
 
