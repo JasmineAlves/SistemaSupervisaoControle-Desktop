@@ -64,7 +64,9 @@ class Database:
                         corrente_max REAL NOT NULL
                             CHECK (corrente_max >= 0),
                         potencia_max REAL NOT NULL
-                            CHECK (potencia_max >= 0)
+                            CHECK (potencia_max >= 0),
+                        foi_alterado_manualmente INTEGER NOT NULL DEFAULT 0
+                            CHECK (foi_alterado_manualmente IN (0, 1))
                     )
                 """)
                 conn.execute("""

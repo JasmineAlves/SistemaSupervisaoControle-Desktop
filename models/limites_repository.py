@@ -10,7 +10,7 @@ class LimitesRepository:
             # Consulta os limites armazenados
             resultado = conn.execute(
                 """
-                SELECT tensao_max, corrente_max, potencia_max
+                SELECT tensao_max, corrente_max, potencia_max, foi_alterado_manualmente
                 FROM limites
                 WHERE id = 1
                 """
@@ -22,7 +22,7 @@ class LimitesRepository:
             conn.close()
 
     @staticmethod
-    def salvar(tensao: float, corrente: float, potencia: float):
+    def salvar(tensao: float, corrente: float, potencia: float, foi_alterado_manualmente: bool = False):
         conn = Database.get_connection()
         try:
             # Att os limites
@@ -32,15 +32,17 @@ class LimitesRepository:
                     UPDATE limites
                     SET tensao_max = ?,
                         corrente_max = ?,
-                        potencia_max = ?
+                        potencia_max = ?,
+                        foi_alterado_manualmente = ?
                     WHERE id = 1
                     """,
-                    (tensao, corrente, potencia)
+                    (tensao, corrente, potencia, int(foi_alterado_manualmente))
                 )
-                # Informa se o registro não existe
+                # Informa se o registro não existe/se foi att
                 if cursor.rowcount != 1:
                     raise RuntimeError(
                         "Não foi possível atualizar os limites de segurança."
                     )
         finally:
             conn.close()
+
