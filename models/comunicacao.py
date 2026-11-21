@@ -26,36 +26,65 @@ class ComunicacaoModel:
             return False
 
         try:
+            baud_rate = int(baud_rate)
             timeout = float(timeout)
         except (TypeError, ValueError):
             return False
         
-        if timeout <= 0:
+        if timeout <= 0 or baud_rate <= 0:
             return False
 
-        # Persiste a configuração antes de atualizar o estado
-        sucesso = self.configuracao.atualizar_configuracao_comunicacao(
-            porta=porta,
-            baud_rate=str(baud_rate),
-            timeout=timeout
-        )
-        if not sucesso:
-            return False
+        nova_conexao = None
 
-        self.porta = porta
-        self.baud_rate = str(baud_rate)
-        self.timeout = timeout
-        self.is_connected = True
-        return True
+        try:
+            # Abre a conexão fisica com porta serial
+            nova_conexao = serial.Serial(
+                port = porta,
+                baudrate = baud_rate,
+                timeout = timeout
+            )
+
+            # Persiste a config após abrir a porta
+            sucesso = self.configuracao.atualizar_configuracao_comunicacao(
+                porta = porta,
+                baud_rate = str(baud_rate),
+                timeout = timeout
+            )
+
+            # Fecha conexão anterior caso exista
+            if self.conexao_serial and self.conexao_serial.is_open:
+                self.conexao_serial.close()
+
+            self.conexao_serial = nova_conexao
+            self.porta = porta
+            self.baud_rate = str(baud_rate)
+            self.timeout = timeout
+            self.is_connected = True
+            return True
+
+        except(serial.SerialException, OSError, ValueError):
+            if nova_conexao and nova_conexao.is_open:
+                nova_conexao.close()
+            self.conexao_serial = None
+            self.is_connected = False
+            return False
 
     def desconectar(self) -> bool:
-        if self.conexao_serial and getattr(self.conexao_serial, 'is_open', False):
-            self.conexao_serial.close()
-
-        self.is_connected = False
-        return True
+        try:
+            if self.conexao_serial and self.conexao_serial.is_open:
+                self.conexao_serial.close()
+            self.conexao_serial = None
+            self.is_connected = False
+            return True
+        except serial.SerialException:
+            self.is_connected = False
+            return False
 
     def obter_status(self) -> str:
-        if self.is_connected:
-            return f"Status : Conectado ({self.porta} @ {self.baud_rate} bps, timeout: {self.timeout}s)"
+        if self.is_connected and self.conexao_serial and self.conexao_serial.is_open:
+            return (
+                f"Status : Conectado "
+                f"({self.porta} @ {self.baud_rate} bps, "
+                f"timeout: {self.timeout}s)"
+        )
         return "Status : Desconectado"
