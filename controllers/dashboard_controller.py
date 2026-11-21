@@ -1088,3 +1088,20 @@ class DashController(QMainWindow):
             descricao="Limite de potência alterado manualmente na dashboard.",
             valor=f"{novo_limite:.1f} W"
         )
+
+    # closeEvent = método definido pelo Qt, NÃO pode mudar nomeação
+    def closeEvent(self, event):
+        # Interrompe timer que faz atts do dash
+        self.timer.stop()
+
+        # Encerra a comunicação serial antes de destruir a janela
+        if (
+            self.comunicacao_controller.model.is_connected
+            or (
+                self.comunicacao_controller.leitura_serial
+                and self.comunicacao_controller.leitura_serial.isRunning()
+            )
+        ):
+            self.comunicacao_controller.ao_desconectar()
+        # Permite que a janela seja fechada após o encerramento da comunicação
+        event.accept()

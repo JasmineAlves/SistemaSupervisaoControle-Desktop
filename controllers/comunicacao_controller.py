@@ -2,6 +2,8 @@ import logging
 from ui.Ui_comunicacao import Ui_Form
 from models.comunicacao import ComunicacaoModel
 from PySide6.QtWidgets import QDialog, QMessageBox
+from models.leitura_serial import LeituraSerial
+from PySide6.QtCore import QTimer
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,19 @@ class ComunicacaoController(QDialog):
         self.ui.setupUi(self)
 
         self.model = model if model else ComunicacaoModel()
+        # Inicializa thread de leitura serial
+        self.leitura_serial = None
+        # Controla se inicialização da comunicação foi confirmada
+        self.inicializacao_confirmada = False
+        self.placa_pronta = False
+        # Controla o tempo de espera pela confirmação do Arduino
+        self.timer_ack = QTimer(self)
+        self.timer_ack.setSingleShot(True)
+        self.timer_ack.timeout.connect(self.ao_timeout_inicializacao)
+
+        self.timer_placa_pronta = QTimer(self)
+        self.timer_placa_pronta.setSingleShot(True)
+        self.timer_placa_pronta.timeout.connect(self.ao_timeout_placa_pronta)
 
         self.configurar_sinais()
         self.carregar_portas_com()
@@ -59,11 +74,21 @@ class ComunicacaoController(QDialog):
                     timeout
                 )
 
+                self.inicializacao_confirmada = False
                 self.atualizar_status(
                     self.model.obter_status(),
                     conectado=True
                 )
                 self.atualizar_interface()
+                # Reinicia estados de inicialização
+                self.inicializacao_confirmada = False
+                self.placa_pronta = False
+
+                # Inicia thread responsável pela recepção serial
+                self.iniciar_leitura_serial()
+
+                # Aguarda arduino informar que terminou o setup
+                self.timer_placa_pronta.start(5000)
             else:
                 logger.warning(
                     "Falha ao estabelecer comunicação: porta=%s, baud rate=%s.",
@@ -88,6 +113,19 @@ class ComunicacaoController(QDialog):
             )
 
     def ao_desconectar(self):
+        # Cancela temporizadores de inicialização
+        self.timer_ack.stop()
+        self.timer_placa_pronta.stop()
+        # Reinicia estados da inicialização
+        self.inicializacao_confirmada = False
+        self.placa_pronta = False
+
+        # Interrompe thread de leitura antes de fechar a comunicação
+        if self.leitura_serial and self.leitura_serial.isRunning():
+            self.leitura_serial.requestInterruption()
+            self.leitura_serial.wait()
+
+        # Faz desconexão da comunicação serial
         self.model.desconectar()
         logger.info("Comunicação desconectada.")
 
@@ -123,7 +161,6 @@ class ComunicacaoController(QDialog):
         else:
             self.atualizar_status(self.model.obter_status(), conectado=False)
 
-
     def carregar_configuracao_salva(self):
         # Recupera parâmetros persistidos
         parametros = self.model.configuracao.obter_configuracao_comunicacao()
@@ -148,3 +185,120 @@ class ComunicacaoController(QDialog):
             self.ui.combo_baud.setCurrentIndex(indice_baud)
         # Restaura timeout salvo
         self.ui.spin_timeout.setValue(timeout_salvo)
+
+    def iniciar_leitura_serial(self):
+        # Conf se já existe thread de leitura executando
+        if self.leitura_serial and self.leitura_serial.isRunning():
+            return
+
+        # Cria thread responsável pela leitura serial
+        self.leitura_serial = LeituraSerial(self.model.conexao_serial, self)
+        # Conecta signals da thread nos métodos do controller
+        self.leitura_serial.dados_recebidos.connect(self.ao_receber_dados)
+        self.leitura_serial.mensagem_bruta.connect(self.ao_receber_mensagem_bruta)
+        self.leitura_serial.erro_leitura.connect(self.ao_ocorrer_erro_leitura)
+
+        # Inicia a recepção de dados
+        self.leitura_serial.start()
+
+    def ao_receber_dados(self, dados: dict):
+        print(f"DADOS INTERPRETADOS: {dados}", flush=True)
+        # Recebe dados validados pelo protocolo certinho
+        logger.debug("Dados serial recebidos: %s", dados)
+
+    def ao_receber_mensagem_bruta(self, mensagem: str):
+        # Registra mensagem original recebida
+        logger.debug("Mensagem serial recebida: %s", mensagem)
+
+        # Aguarda a placa informar que terminou a inicialização
+        if not self.placa_pronta:
+            if mensagem == "PLACA EM ESPERA (9600 baud)":
+                self.placa_pronta = True
+                self.timer_placa_pronta.stop()
+
+                logger.info("Arduino pronto para receber comandos.")
+
+                baud_rate = self.ui.combo_baud.currentText()
+                comando = f"!S{baud_rate}"
+
+                if self.model.enviar_comando(comando):
+                    logger.info(
+                        "Comando de inicialização enviado: %s",
+                        comando
+                    )
+                    self.timer_ack.start(3000)
+                else:
+                    logger.error("Falha ao enviar comando de inicialização.")
+                    QMessageBox.warning(
+                        self,
+                        "Falha na inicialização",
+                        "Não foi possível enviar o comando ao Arduino."
+                    )
+                    self.ao_desconectar()
+
+            return
+
+        # Confirma inicialização após recebimento do ACK
+        if not self.inicializacao_confirmada:
+            baud_rate = self.ui.combo_baud.currentText()
+            ack_inicializacao = f">>> ACK: INICIANDO EM {baud_rate} BPS <<<"
+
+            if mensagem == ack_inicializacao:
+                self.inicializacao_confirmada = True
+                self.timer_ack.stop()
+
+                # Altera velocidade da serial após confirmação
+                sucesso = self.model.alterar_baud_rate(int(baud_rate))
+
+                if sucesso:
+                    logger.info(
+                        "Inicialização confirmada. Comunicação operando em %s baud.",
+                        baud_rate
+                    )
+                    self.atualizar_status(
+                        self.model.obter_status(),
+                        conectado=True
+                    )
+                else:
+                    logger.error("Falha ao alterar baud rate após confirmação.")
+                    QMessageBox.warning(
+                        self,
+                        "Falha na comunicação",
+                        "O Arduino confirmou a inicialização, mas não foi possível alterar o baud rate."
+                    )
+                    self.ao_desconectar()
+
+    def ao_timeout_inicializacao(self):
+        if self.inicializacao_confirmada:
+            return
+
+        logger.error("Timeout aguardando confirmação de inicialização do Arduino.")
+        QMessageBox.warning(
+            self,
+            "Timeout de comunicação",
+            "O Arduino não confirmou a inicialização dentro do tempo esperado."
+        )
+        self.ao_desconectar()
+
+    def ao_timeout_placa_pronta(self):
+        if self.placa_pronta:
+            return
+
+        logger.error("Timeout aguardando inicialização do Arduino.")
+
+        QMessageBox.warning(
+            self,
+            "Timeout de comunicação",
+            "O Arduino não informou que estava pronto para receber comandos."
+        )
+
+        self.ao_desconectar()
+
+    def ao_ocorrer_erro_leitura(self, erro: str):
+        # Registra erro q pode acontecer na leitura
+        logger.error("Erro na leitura serial: %s", erro)
+
+    # closeEvent = método definido pelo Qt, NÃO pode mudar nomeação
+    def closeEvent(self, event):
+        # Fecha o modal de comunicação, mas comunicação vai continuar normal
+        event.accept()
