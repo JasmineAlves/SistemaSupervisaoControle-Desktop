@@ -1,0 +1,1 @@
+# para executar todos os testes existentes: python3 -m unittest discover -v

@@ -5,11 +5,13 @@ import math
 
 class Medicao:
     # Parâmetros de conversão dos sensors q devem ser definidos conforme o circuito de condicionamento e calibração
-    FATOR_TENSAO = None
+    # tensão do sistema de 0-12v pois acima pode danificar
+    FATOR_TENSAO = 12.0 / 1023.0
     OFFSET_TENSAO = 0.0
 
-    FATOR_CORRENTE = None
-    OFFSET_CORRENTE = 0.0
+    # 0A centro analógico prox a 2,5v e 512 no conversor adc, acima + e abaixo -
+    FATOR_CORRENTE = 30.0 / 512.0
+    OFFSET_CORRENTE = 512
 
     # Referência e resolução do adc
     REFERENCIA_ADC = 3.3
@@ -49,7 +51,7 @@ class Medicao:
         return valor
 
     @classmethod
-    def converter_adc(cls, adc, fator, offset):
+    def converter_adc(cls, adc, fator, offset, permitir_negativo=False):
         if fator is None:
             return None
 
@@ -57,6 +59,9 @@ class Medicao:
 
         if not math.isfinite(valor):
             raise ValueError("Valor convertido inválido")
+
+        if permitir_negativo:
+            return valor
 
         return max(0.0, valor)
 
@@ -78,9 +83,10 @@ class Medicao:
         )
 
         corrente = cls.converter_adc(
-            adc_corrente,
+            adc_corrente - cls.OFFSET_CORRENTE,
             cls.FATOR_CORRENTE,
-            cls.OFFSET_CORRENTE
+            0.0,
+            permitir_negativo=True
         )
 
         return cls(
