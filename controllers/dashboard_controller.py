@@ -470,7 +470,8 @@ class DashController(QMainWindow):
 
     
     def atualizar_dashboard(self):
-        # Exibe na interface oq veio da medição/att indicadores
+
+        # Exibe na interface o que veio da medição e atualiza indicadores
         # Verifica se existe telemetria recebida
         if self.dados_serial_atual is None:
             self.ui.lbl_valor_tensao.setText("--")
@@ -481,19 +482,35 @@ class DashController(QMainWindow):
             self.ui.lbl_status_detalhe.setText(
                 "Aguardando dados do Arduino."
             )
-
             self.ui.lbl_status_atualizacao.setText(
                 "Última atualização: --"
             )
-
             return
 
         dados = self.dados_serial_atual
+        medicao = self.medicao_atual
 
-        # Grandezas elétricas ainda não possuem calibração
-        self.ui.lbl_valor_tensao.setText("--")
-        self.ui.lbl_valor_corrente.setText("--")
-        self.ui.lbl_valor_potencia.setText("--")
+        # Atualiza as grandezas elétricas quando existe uma medição processada
+        if medicao is not None and medicao.tensao is not None:
+            self.ui.lbl_valor_tensao.setText(
+                f"{medicao.tensao:.2f} V"
+            )
+        else:
+            self.ui.lbl_valor_tensao.setText("--")
+
+        if medicao is not None and medicao.corrente is not None:
+            self.ui.lbl_valor_corrente.setText(
+                f"{medicao.corrente:.2f} A"
+            )
+        else:
+            self.ui.lbl_valor_corrente.setText("--")
+
+        if medicao is not None and medicao.potencia is not None:
+            self.ui.lbl_valor_potencia.setText(
+                f"{medicao.potencia:.2f} W"
+            )
+        else:
+            self.ui.lbl_valor_potencia.setText("--")
 
         # Estado real informado pelo Arduino
         status_rele = int(dados["status_rele"])
@@ -509,21 +526,17 @@ class DashController(QMainWindow):
                 f"A1: {dados['a1']} | "
                 f"Botão: {dados['status_botao']}"
             )
-
             estado = "fechado"
-
         else:
             self.ui.lbl_status_disjuntor.setText(
                 "ABERTO / PROTEÇÃO ATIVADA"
             )
-
             self.ui.lbl_status_detalhe.setText(
                 f"Relé desenergizado | "
                 f"A0: {dados['a0']} | "
                 f"A1: {dados['a1']} | "
                 f"Botão: {dados['status_botao']}"
             )
-
             estado = "aberto"
 
         # Atualiza estado visual
@@ -1060,7 +1073,7 @@ class DashController(QMainWindow):
         # Registra os dados recebidos no log
         logger.debug("Dados recebidos na dashboard: %s", dados)
 
-        # Verifica se todos os campos esperados foram recebidos
+        # Conf se todos os campos esperados foram recebidos
         campos_necessarios = {
             "a0",
             "a1",
@@ -1070,13 +1083,6 @@ class DashController(QMainWindow):
 
         if not campos_necessarios.issubset(dados.keys()):
             logger.warning("Dados serial recebidos incompletos: %s", dados)
-            return
-
-        # Registra as leituras brutas para utilização posterior nos gráficos
-        try:
-            self.registrar_telemetria_bruta(dados)
-        except (ValueError, TypeError, KeyError) as erro:
-            logger.warning("Falha ao registrar telemetria bruta: %s", erro)
             return
 
         # Converte o estado do relé para inteiro
@@ -1090,11 +1096,28 @@ class DashController(QMainWindow):
             logger.warning("Estado do relé fora do padrão: %s", status_rele)
             return
 
+        # Converte o estado recebido para o estado lógico do sistema
+        rele_ligado = status_rele == 1
+
         # Guarda os dados recebidos do Arduino para usar na dash
         self.dados_serial_atual = dados
 
-        # Converte o estado recebido para o estado lógico do sistema
-        rele_ligado = status_rele == 1
+        # Converte os dados brutos em uma medição elétrica
+        try:
+            self.medicao_atual = Medicao.a_partir_dos_dados_brutos(
+                adc_tensao=dados["a0"],
+                adc_corrente=dados["a1"],
+                disjuntor=rele_ligado
+            )
+        except (ValueError, TypeError, KeyError) as erro:
+            self.medicao_atual = None
+            logger.warning("Falha ao processar medição elétrica: %s", erro)
+
+        # Registra as leituras brutas para utilização posterior nos gráficos
+        try:
+            self.registrar_telemetria_bruta(dados)
+        except (ValueError, TypeError, KeyError) as erro:
+            logger.warning("Falha ao registrar telemetria bruta: %s", erro)
 
         # Verifica se existe uma operação aguardando confirmação
         if self.acao_rele_pendente is not None:
