@@ -11,6 +11,7 @@ from controllers.configuracao_controller import ConfiguracaoController
 from models.configuracao import Configuracao
 from models.registro_repository import RegistroRepository
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -44,17 +45,40 @@ class DashController(QMainWindow):
         # Se a potência ultrapassar o limite configurado por esse fator, disjuntor dispara sozinho
         self.fator_sobrecorrente = 1.5
         self.medicao_disparo = None
-        # A proteção permanece desativada até a calibração das medições do Arduino
-        self.protecao_automatica_habilitada = False
+        # Indica que a proteção automática já realizou uma tentativa de disparo
+        self.protecao_sobrecorrente_disparada = False
+        # False = não clalibrado, True = calibrado
+        self.protecao_automatica_habilitada = True
+        # Evita repetir logs enquanto a comunicação estiver indisponível
+        self.protecao_comunicacao_indisponivel = False
+        # Evita repetir logs enquanto o limite de potência está pendente
+        self.protecao_limite_pendente = False
+
+        # Conta amostras consecutivas acima do limite de disparo (evita corte por uma amostra ruim)
+        self.amostras_sobrecorrente = 0
+        # Quantidade de amostras consecutivas necessárias para o disparo automático
+        self.amostras_para_disparo = 3
+        # Janela de carência da proteção logo após conectar (transitório do ADC)
+        self.ignorar_protecao_ate = None
+
+        # Energiza (envia !1) uma única vez ao conectar, se o relé estiver aberto
+        # Coloque False para apenas espelhar o estado informado pelo hardware
+        self.energizar_ao_conectar = True
+        # Indica que a energização inicial já foi tentada nesta conexão
+        self.tentou_energizar_ao_conectar = False
+        # Indica que a energização inicial aguarda confirmação do relé
+        self.energizando_ao_conectar = False
+        # Guarda o estado anterior da conexão serial para detectar mudanças
+        self.conexao_anterior = False
 
         # Guarda a última medição recebida do hardware
         self.medicao_atual = None
         # Guarda o estado anterior do disjuntor, inicialmente desconhecido
         self.disjuntor_anterior = None
-
         self.dados_serial_atual = None
         self.acao_rele_pendente = None
 
+        self.confirmacoes_rele_aberto = 0
         self.timer_confirmacao_rele = QTimer(self)
         self.timer_confirmacao_rele.setSingleShot(True)
         self.timer_confirmacao_rele.timeout.connect(
@@ -114,6 +138,12 @@ class DashController(QMainWindow):
             self.ao_receber_dados_serial
         )
 
+        # Monitora a conexão serial para reiniciar o estado quando ela muda
+        # (funciona mesmo com a janela de comunicação aberta)
+        self.timer_monitor_conexao = QTimer(self)
+        self.timer_monitor_conexao.timeout.connect(self.monitorar_conexao)
+        self.timer_monitor_conexao.start(200)
+
         # Abre a janela de comunicação serial
         self.ui.btn_comunicacao.clicked.connect(self.abrir_comunicacao)
 
@@ -125,12 +155,52 @@ class DashController(QMainWindow):
         self.ui.btn_limpar_filtro.clicked.connect(self.limpar_filtro_data)
 
 
+    # Detecta conexão/desconexão e reinicia o estado da supervisão
+    def monitorar_conexao(self):
+        conectado = bool(self.comunicacao_controller.model.is_connected)
+
+        if conectado != self.conexao_anterior:
+            self.conexao_anterior = conectado
+            self.resetar_estado_conexao()
+
+    # Descarta o estado da sessão anterior para o hardware ser sincronizado do zero
+    def resetar_estado_conexao(self):
+        self.timer_confirmacao_rele.stop()
+        self.acao_rele_pendente = None
+
+        self.dados_serial_atual = None
+        self.medicao_atual = None
+        # Força nova sincronização com o estado real do hardware
+        self.disjuntor_anterior = None
+        self.corte_emergencia_ativo = False
+        self.limite_ultrapassado = False
+
+        self.protecao_sobrecorrente_disparada = False
+        self.medicao_disparo = None
+        self.amostras_sobrecorrente = 0
+        self.tentou_energizar_ao_conectar = False
+        self.energizando_ao_conectar = False
+        # Carência para ignorar transitórios logo após conectar
+        self.ignorar_protecao_ate = datetime.now() + timedelta(seconds=2)
+
+        self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
+        self.ui.lbl_valor_potencia.setStyleSheet(
+            "font-weight: bold;"
+        )
+
+        # Volta para "AGUARDANDO MEDIÇÃO"
+        self.atualizar_dashboard()
+
     # Monta evento com medição atual antes de registrar corte
-    def executar_corte(self, aberto, tipo, descricao):
+    def executar_corte(self, aberto, tipo, descricao, valor_medicao=None):
         registro = Registro(
             tipo=tipo,
             descricao=descricao,
-            valor=self.formatar_medicao()
+            valor=(
+                valor_medicao
+                if valor_medicao is not None
+                else self.formatar_medicao()
+            )
         )
         try:
             # Att disjuntor e salva o evento
@@ -149,10 +219,11 @@ class DashController(QMainWindow):
             # Informa a falha sem modificar o estado
             QMessageBox.critical(
                 self,
-                "Erro ao alterar disjuntor",
+                "Falha no registro da operação",
                 (
-                    "A operação não foi concluída e as alterações no banco "
-                    "foram revertidas, quando aplicável.\n\n"
+                    "O Arduino confirmou a alteração física do relé, "
+                    "mas não foi possível registrar o evento no banco de dados.\n\n"
+                    "Verifique a persistência e o histórico do sistema.\n\n"
                     f"Detalhes: {erro}"
                 )
             )
@@ -180,6 +251,53 @@ class DashController(QMainWindow):
         # Att lista em memória
         self.registros.insert(0, registro)
         self.atualizar_tabela()
+        return True
+
+    def solicitar_acao_rele(self, acao, comando):
+        # Evita enviar comandos enquanto outro aguarda confirmação
+        if self.acao_rele_pendente is not None:
+            logger.warning("Já existe uma operação do relé pendente.")
+            return False
+
+        # Registra a ação antes do envio para evitar perder uma confirmação rápida
+        self.acao_rele_pendente = acao
+
+        # Envia o comando diretamente ao Arduino
+        try:
+            enviado = self.comunicacao_controller.model.enviar_comando(
+                comando
+            )
+        except Exception:
+            logger.exception("Erro ao enviar comando para o relé")
+
+            self.acao_rele_pendente = None
+
+            QMessageBox.critical(
+                self,
+                "Erro de comunicação",
+                "Não foi possível enviar o comando ao Arduino."
+            )
+            return False
+
+        # Verifica se o comando foi enviado
+        if not enviado:
+            self.acao_rele_pendente = None
+
+            QMessageBox.warning(
+                self,
+                "Falha no comando",
+                "O comando não foi enviado ao Arduino."
+            )
+            return False
+
+        # Aguarda até 3 segundos pela confirmação do relé
+        self.timer_confirmacao_rele.start(3000)
+
+        logger.info(
+            "Comando %s enviado. Aguardando confirmação do Arduino.",
+            comando
+        )
+
         return True
 
     # Confirma corte/reativação do sistema por Arduino
@@ -231,37 +349,8 @@ class DashController(QMainWindow):
             }
 
             comando = "!1"
-
-        # Envia o comando diretamente ao Arduino
-        try:
-            enviado = self.comunicacao_controller.model.enviar_comando(comando)
-        except Exception as erro:
-            logger.exception("Erro ao enviar comando para o relé")
-
-            QMessageBox.critical(
-                self,
-                "Erro de comunicação",
-                f"Não foi possível enviar o comando ao Arduino.\n\n{erro}"
-            )
-            return
-
-        # Verifica se o comando foi enviado
-        if not enviado:
-            QMessageBox.warning(
-                self,
-                "Falha no comando",
-                "O comando não foi enviado ao Arduino."
-            )
-            return
-
-        # Guarda a ação até receber a confirmação pela telemetria
-        self.acao_rele_pendente = acao
-
-        # Aguarda até 3 segundos pela confirmação do relé
-        self.timer_confirmacao_rele.start(3000)
-
-        logger.info("Comando %s enviado. Aguardando confirmação do Arduino.", comando)
-
+        # Solicita ação de abertura/fechamento do rele
+        self.solicitar_acao_rele(acao, comando)
 
     # Trata o caso em que o Arduino não confirma o comando enviado
     def ao_expirar_confirmacao_rele(self):
@@ -273,6 +362,11 @@ class DashController(QMainWindow):
 
         if acao is None:
             return
+
+        # Sem confirmação da energização inicial: passa a mostrar o estado real
+        if self.energizando_ao_conectar:
+            self.energizando_ao_conectar = False
+            self.atualizar_dashboard()
         logger.warning(
             "Timeout aguardando confirmação do relé. "
             "Estado esperado: %s",
@@ -363,7 +457,7 @@ class DashController(QMainWindow):
 
         if not historico:
             self.curva_a0.setData([], [])
-            self.curva_a1.setData([])
+            self.curva_a1.setData([], [])
             return
 
         tempos = [
@@ -407,14 +501,16 @@ class DashController(QMainWindow):
     
     def atualizar_dashboard(self):
 
-        # Exibe na interface o que veio da medição e atualiza indicadores
         # Verifica se existe telemetria recebida
-        if self.dados_serial_atual is None:
+        # (também aguarda enquanto a energização inicial não é confirmada)
+        if self.dados_serial_atual is None or self.energizando_ao_conectar:
             self.ui.lbl_valor_tensao.setText("--")
             self.ui.lbl_valor_corrente.setText("--")
             self.ui.lbl_valor_potencia.setText("--")
 
-            self.ui.lbl_status_disjuntor.setText("AGUARDANDO MEDIÇÃO")
+            self.ui.lbl_status_disjuntor.setText(
+                "AGUARDANDO MEDIÇÃO"
+            )
             self.ui.lbl_status_detalhe.setText(
                 "Aguardando dados do Arduino."
             )
@@ -426,32 +522,41 @@ class DashController(QMainWindow):
         dados = self.dados_serial_atual
         medicao = self.medicao_atual
 
-        # Atualiza as grandezas elétricas quando existe uma medição processada
-        if medicao is not None and medicao.tensao is not None:
-            self.ui.lbl_valor_tensao.setText(
-                f"{medicao.tensao:.2f} V"
-            )
-        else:
-            self.ui.lbl_valor_tensao.setText("--")
-
-        if medicao is not None and medicao.corrente is not None:
-            self.ui.lbl_valor_corrente.setText(
-                f"{medicao.corrente:.2f} A"
-            )
-        else:
-            self.ui.lbl_valor_corrente.setText("--")
-
-        if medicao is not None and medicao.potencia is not None:
-            self.ui.lbl_valor_potencia.setText(
-                f"{medicao.potencia:.2f} W"
-            )
-        else:
-            self.ui.lbl_valor_potencia.setText("--")
-
-        # Estado real informado pelo Arduino
         status_rele = int(dados["status_rele"])
 
-        if status_rele == 1:
+        # Sistema desenergizado: grandezas elétricas zeradas
+        if status_rele == 0:
+            self.ui.lbl_valor_tensao.setText("0.00 V")
+            self.ui.lbl_valor_corrente.setText("0.00 A")
+            self.ui.lbl_valor_potencia.setText("0.00 W")
+
+            self.ui.lbl_status_disjuntor.setText(
+                "ABERTO / PROTEÇÃO ATIVADA"
+            )
+
+            self.ui.lbl_status_detalhe.setText(
+                "A instalação encontra-se desenergizada."
+            )
+
+            estado = "aberto"
+
+        else:
+            # Sistema energizado: exibe as grandezas reais
+            if medicao is not None:
+                self.ui.lbl_valor_tensao.setText(
+                    f"{medicao.tensao:.2f} V"
+                )
+                self.ui.lbl_valor_corrente.setText(
+                    f"{medicao.corrente:.2f} A"
+                )
+                self.ui.lbl_valor_potencia.setText(
+                    f"{medicao.potencia:.2f} W"
+                )
+            else:
+                self.ui.lbl_valor_tensao.setText("--")
+                self.ui.lbl_valor_corrente.setText("--")
+                self.ui.lbl_valor_potencia.setText("--")
+
             self.ui.lbl_status_disjuntor.setText(
                 "FECHADO / NORMAL"
             )
@@ -462,18 +567,8 @@ class DashController(QMainWindow):
                 f"A1: {dados['a1']} | "
                 f"Botão: {dados['status_botao']}"
             )
+
             estado = "fechado"
-        else:
-            self.ui.lbl_status_disjuntor.setText(
-                "ABERTO / PROTEÇÃO ATIVADA"
-            )
-            self.ui.lbl_status_detalhe.setText(
-                f"Relé desenergizado | "
-                f"A0: {dados['a0']} | "
-                f"A1: {dados['a1']} | "
-                f"Botão: {dados['status_botao']}"
-            )
-            estado = "aberto"
 
         # Atualiza estado visual
         self.ui.statusCard.setProperty("estado", estado)
@@ -486,7 +581,7 @@ class DashController(QMainWindow):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
 
-        # Horário da última telemetria
+        # Horário da última comunicação recebida
         horario = datetime.now().strftime("%H:%M:%S")
 
         self.ui.lbl_status_atualizacao.setText(
@@ -508,7 +603,10 @@ class DashController(QMainWindow):
 
     def verificar_limite(self):
         # Verifica o limite usando a medição atual
-
+        
+        if self.medicao_atual is None:
+            return
+        
         # Usa somente o limite confirmado.
         limite = self.limite_potencia_aplicado
 
@@ -529,92 +627,168 @@ class DashController(QMainWindow):
         # Impede o acionamento com medições não calibradas
         if not self.protecao_automatica_habilitada:
             return
+
+        # Evita repetir comandos após uma tentativa de proteção automática
+        if self.protecao_sobrecorrente_disparada:
+            return
+
         # Impede a avaliação sem uma medição válida
         if self.medicao_atual is None:
             return
-        
-        # Usa somente o limite de potência confirmado
-        limite = self.limite_potencia_aplicado
-        sobrecorrente_severa = (
-            self.medicao_atual.disjuntor
-            and limite >= 0
-            and self.medicao_atual.potencia > limite * self.fator_sobrecorrente
-        )
-        if not sobrecorrente_severa:
+
+        # Ignora a proteção durante a carência logo após conectar
+        if (
+            self.ignorar_protecao_ate is not None
+            and datetime.now() < self.ignorar_protecao_ate
+        ):
+            self.amostras_sobrecorrente = 0
             return
 
-        # Guarda a medição que causou o disparo
-        self.medicao_disparo = self.medicao_atual
-        valor_disparo = self.formatar_medicao_customizada(
-            self.medicao_disparo
-        )
-
-        registro = Registro(
-            tipo="Alerta",
-            descricao="Disjuntor aberto espontaneamente / proteção ativada.",
-            valor=valor_disparo
-        )
-
-        try:
-            # Persiste estado do disjuntor e o evento
-            id_registro = RegistroRepository.registrar_corte(
-                aberto=True,
-                registro=registro
-            )
-        except Exception as erro:
-            # Registra log no smartgrid.log
-            logger.exception(
-                "Falha na operação de corte automático. "
-                "A transação foi revertida quando aplicável: %s", erro
-            )
-
-            QMessageBox.critical(
-                self,
-                "Erro na proteção",
-                (
-                    "Não foi possível registrar o corte automático no banco. "
-                    "O estado não será alterado.\n\n"
-                    "Consulte logs/smartgrid.log para mais detalhes."
+        # Não avalia sobrecorrente durante alteração do limite
+        if self.limite_potencia_pendente:
+            if not self.protecao_limite_pendente:
+                logger.warning(
+                    "Proteção automática temporariamente suspensa: "
+                    "alteração do limite de potência pendente."
                 )
+
+            self.protecao_limite_pendente = True
+            return
+
+        # Registra que a alteração do limite foi concluída
+        if self.protecao_limite_pendente:
+            logger.info(
+                "Alteração do limite de potência concluída. "
+                "Proteção automática retomada."
+            )
+            self.protecao_limite_pendente = False
+
+        # Valida a potência antes de utilizá-la na proteção
+        try:
+            potencia = float(self.medicao_atual.potencia)
+            limite = float(self.limite_potencia_aplicado)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Proteção automática ignorada: potência ou limite inválido."
             )
             return
 
-        # Att o histórico em memória
-        registro.id = id_registro
-        self.registros.insert(0, registro)
-        self.atualizar_tabela()
+        # Impede o uso de valores não numéricos ou fora do domínio esperado
+        if not math.isfinite(potencia) or not math.isfinite(limite):
+            logger.warning(
+                "Proteção automática ignorada: valor numérico inválido."
+            )
+            return
 
-        # Registra log no smartgrid.log
+        if potencia < 0 or limite < 0:
+            logger.warning(
+                "Proteção automática ignorada: potência ou limite negativo."
+            )
+            return
+
+        # Limite zero faria qualquer potência positiva disparar a proteção
+        if limite == 0:
+            logger.warning(
+                "Proteção automática ignorada: limite de potência é zero."
+            )
+            return
+
+        # Evita novos acionamentos enquanto existe uma operação pendente
+        if self.acao_rele_pendente is not None:
+            return
+
+        # Proteção automática só atua com o relé fisicamente fechado
+        if not self.medicao_atual.disjuntor:
+            self.amostras_sobrecorrente = 0
+            return
+
+        # Evita corte redundante se o sistema já estiver em emergência
+        if self.corte_emergencia_ativo:
+            return
+
+        # Usa somente valores validados e o limite de potência confirmado
+        sobrecorrente_severa = (
+            potencia > limite * self.fator_sobrecorrente
+        )
+
+        if not sobrecorrente_severa:
+            self.amostras_sobrecorrente = 0
+            return
+
+        # Exige amostras consecutivas acima do limite antes de disparar
+        self.amostras_sobrecorrente += 1
+
+        if self.amostras_sobrecorrente < self.amostras_para_disparo:
+            return
+
+        # Verifica se existe comunicação com o Arduino
+        if not self.comunicacao_controller.model.is_connected:
+            if not self.protecao_comunicacao_indisponivel:
+                logger.error(
+                    "Proteção automática detectou condição, mas a comunicação "
+                    "com o Arduino está desconectada. Corte físico indisponível."
+                )
+
+            self.protecao_comunicacao_indisponivel = True
+            return
+
+        # Registra a recuperação da comunicação
+        if self.protecao_comunicacao_indisponivel:
+            logger.info(
+                "Comunicação com o Arduino restabelecida. "
+                "Proteção automática voltou a operar."
+            )
+            self.protecao_comunicacao_indisponivel = False
+
+        # Guarda a medição que provocou o disparo
+        self.medicao_disparo = self.medicao_atual
+
         logger.warning(
-            "Proteção automática acionada: potência medida=%.1f W, "
+            "Sobrecorrente severa detectada: potência medida=%.1f W, "
             "limite configurado=%.1f W, fator=%.1f, "
             "limite de disparo=%.1f W",
             self.medicao_disparo.potencia,
             limite,
-            self.fator_sobrecorrente
+            self.fator_sobrecorrente,
+            limite * self.fator_sobrecorrente
         )
 
-        # Evita que verificar_eventos registre o mesmo disparo novamente
-        self.disjuntor_anterior = self.medicao_atual.disjuntor
-        # Sincroniza o estado do botão com o corte automático
-        self.corte_emergencia_ativo = True
-        self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
+        # Prepara a ação que será concluída somente após confirmação do Arduino
+        acao = {
+            "aberto": True,
+            "status_esperado": 0,
+            "tipo": "Alerta",
+            "descricao": (
+                "Corte automático por sobrecorrente severa."
+            ),
+            "automatico": True
+        }
 
-        # Informa o disparo ao usuário
-        QMessageBox.warning(
-            self,
-            "Proteção Ativada",
-            (
-                "O disjuntor foi aberto automaticamente devido à "
-                "sobrecorrente severa.\n\n"
-                f"Medição no momento do disparo: {valor_disparo}"
+        # Bloqueia novas tentativas automáticas repetidas
+        self.protecao_sobrecorrente_disparada = True
+
+        # Solicita a abertura física do relé
+        enviado = self.solicitar_acao_rele(acao, "!0")
+
+        if not enviado:
+            logger.error(
+                "Proteção automática detectada, mas o comando de abertura "
+                "do relé não foi enviado."
             )
-        )
+            return
 
     def verificar_eventos(self):
         # Verifica se aconteceu alguma mudança relevante
         medicao = self.medicao_atual
+
         if medicao is None or medicao.potencia is None:
+            return
+        # Não avalia limite de potência com o relé aberto
+        if not medicao.disjuntor:
+            self.limite_ultrapassado = False
+            self.ui.lbl_valor_potencia.setStyleSheet(
+                "font-weight: bold;"
+            )
             return
 
         # Usa somente o limite efetivamente aplicado.
@@ -885,6 +1059,18 @@ class DashController(QMainWindow):
             # O OK da configuração aplica efetivamente o novo limite.
             self.limite_potencia_aplicado = novo_limite
             self.limite_potencia_pendente = False
+
+            # Rearma a proteção após alteração confirmada do limite,
+            # somente se o relé estiver fisicamente fechado.
+            if (
+                self.medicao_atual is not None
+                and self.medicao_atual.disjuntor
+                and self.acao_rele_pendente is None
+            ):
+                self.protecao_sobrecorrente_disparada = False
+                self.medicao_disparo = None
+                self.amostras_sobrecorrente = 0
+
             self.ui.spin_limite_potencia.setStyleSheet("")
 
             self.adicionar_registro(
@@ -932,14 +1118,29 @@ class DashController(QMainWindow):
         self.limite_potencia_aplicado = novo_limite
         self.limite_potencia_pendente = False
 
+        # Rearma a proteção após alteração confirmada do limite,
+        # somente se o relé estiver fisicamente fechado
+        if (
+            self.medicao_atual is not None
+            and self.medicao_atual.disjuntor
+            and self.acao_rele_pendente is None
+        ):
+            self.protecao_sobrecorrente_disparada = False
+            self.medicao_disparo = None
+            self.amostras_sobrecorrente = 0
+
         self.ui.spin_limite_potencia.setValue(novo_limite)
         # Volta a cor normal depois da confirmação.
         self.ui.spin_limite_potencia.setStyleSheet("")
 
-        # Atualiza o estado do alerta com o novo limite confirmado.
-        self.limite_ultrapassado = (
-            self.medicao_atual.potencia > self.limite_potencia_aplicado
-        )
+        # Att o estado de ultrapassagem somente com medição disponível
+        if self.medicao_atual is not None:
+            self.limite_ultrapassado = (
+                self.medicao_atual.potencia
+                > self.limite_potencia_aplicado
+            )
+        else:
+            self.limite_ultrapassado = False
         self.verificar_limite()
 
         self.adicionar_registro(
@@ -1007,11 +1208,15 @@ class DashController(QMainWindow):
             self.medicao_atual = None
             logger.warning("Falha ao processar medição elétrica: %s", erro)
 
-        # Registra as leituras brutas para utilização posterior nos gráficos
+        # Registra dados para o gráfico e o histórico, inclusive com o relé aberto
+        # A comunicação serial continua ativa mesmo com o sistema cortado
         try:
-            self.registrar_telemetria_bruta(dados)
+            self.registrar_telemetria_bruta(dados, rele_ligado)
         except (ValueError, TypeError, KeyError) as erro:
-            logger.warning("Falha ao registrar telemetria bruta: %s", erro)
+            logger.warning(
+                "Falha ao registrar telemetria bruta: %s",
+                erro
+            )
 
         # Verifica se existe uma operação aguardando confirmação
         if self.acao_rele_pendente is not None:
@@ -1026,17 +1231,33 @@ class DashController(QMainWindow):
             self.acao_rele_pendente = None
 
             logger.info("Comando do relé confirmado pela telemetria.")
+            self.energizando_ao_conectar = False
 
-            # Registra o evento confirmado no banco
+            # Preserva a medição original do disparo automático
+            valor_disparo = None
+
+            if acao.get("automatico") and self.medicao_disparo is not None:
+                valor_disparo = self.formatar_medicao_customizada(
+                    self.medicao_disparo
+                )
+
+            # Registra o corte confirmado pelo hardware
             sucesso = self.executar_corte(
                 aberto=acao["aberto"],
                 tipo=acao["tipo"],
-                descricao=acao["descricao"]
+                descricao=acao["descricao"],
+                valor_medicao=valor_disparo
             )
 
             # Atualiza a interface conforme o estado real informado pelo Arduino
             self.corte_emergencia_ativo = not rele_ligado
             self.disjuntor_anterior = rele_ligado
+
+            # Rearma a proteção automática após confirmação de reativação
+            if rele_ligado and not self.limite_potencia_pendente:
+                self.protecao_sobrecorrente_disparada = False
+                self.medicao_disparo = None
+                self.amostras_sobrecorrente = 0
 
             if self.corte_emergencia_ativo:
                 self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
@@ -1044,6 +1265,18 @@ class DashController(QMainWindow):
                 self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
 
             self.atualizar_dashboard()
+
+            # Popup obrigatório após confirmação física do corte automático
+            if acao.get("automatico") and not rele_ligado:
+                QMessageBox.warning(
+                    self,
+                    "Proteção Ativada",
+                    (
+                        "O disjuntor abriu automaticamente devido à "
+                        "sobrecorrente severa.\n\n"
+                        f"Medição no momento do disparo: {valor_disparo}"
+                    )
+                )
 
             # Informa caso o estado físico tenha sido confirmado,
             # mas o registro no banco tenha falhado
@@ -1063,17 +1296,75 @@ class DashController(QMainWindow):
             self.disjuntor_anterior = rele_ligado
             self.corte_emergencia_ativo = not rele_ligado
 
+            # Carência da proteção a partir do primeiro pacote recebido
+            self.ignorar_protecao_ate = datetime.now() + timedelta(seconds=2)
+            self.amostras_sobrecorrente = 0
+
+            # Relé aberto ao conectar: tenta energizar uma única vez
+            # Mostra "AGUARDANDO MEDIÇÃO" até o hardware confirmar
+            if (
+                not rele_ligado
+                and self.energizar_ao_conectar
+                and not self.tentou_energizar_ao_conectar
+            ):
+                self.tentou_energizar_ao_conectar = True
+                self.energizando_ao_conectar = True
+
+                logger.info(
+                    "Relé aberto ao conectar. Enviando comando de energização inicial."
+                )
+
+                acao = {
+                    "aberto": False,
+                    "status_esperado": 1,
+                    "tipo": "Status",
+                    "descricao": "Sistema energizado ao iniciar a comunicação."
+                }
+
+                if not self.solicitar_acao_rele(acao, "!1"):
+                    self.energizando_ao_conectar = False
+
             if self.corte_emergencia_ativo:
                 self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
             else:
                 self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
 
             self.atualizar_dashboard()
+
             return
 
         # Detecta alterações de estado realizadas diretamente no hardware
         if rele_ligado != self.disjuntor_anterior:
             aberto = not rele_ligado
+
+            # Identifica abertura espontânea do relé
+            abertura_espontanea = (
+                aberto
+                and self.acao_rele_pendente is None
+            )
+
+            if abertura_espontanea:
+                logger.warning(
+                    "Abertura espontânea do relé detectada pelo hardware."
+                )
+
+                # Captura a medição no instante da abertura espontânea
+                valor_disparo = (
+                    self.formatar_medicao_customizada(self.medicao_atual)
+                    if self.medicao_atual is not None
+                    else "Sem medição disponível"
+                )
+
+                QMessageBox.warning(
+                    self,
+                    "Proteção ativada",
+                    (
+                        "O disjuntor foi aberto pelo hardware sem uma "
+                        "solicitação do software.\n\n"
+                        f"Medição no momento da abertura: {valor_disparo}\n\n"
+                        "Verifique a carga e as condições do sistema."
+                    )
+                )
 
             # Registra a alteração identificada pela telemetria
             sucesso = self.executar_corte(
@@ -1083,12 +1374,19 @@ class DashController(QMainWindow):
                     "Relé desligado pelo hardware."
                     if aberto
                     else "Relé ligado pelo hardware."
-                )
+                ),
+                valor_medicao=valor_disparo if aberto else None
             )
 
             # Atualiza o estado conforme a telemetria, independentemente do registro
             self.disjuntor_anterior = rele_ligado
             self.corte_emergencia_ativo = aberto
+
+            # Rearma a proteção quando o hardware fecha o relé
+            if rele_ligado and not self.limite_potencia_pendente:
+                self.protecao_sobrecorrente_disparada = False
+                self.medicao_disparo = None
+                self.amostras_sobrecorrente = 0
 
             if aberto:
                 self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
@@ -1102,8 +1400,12 @@ class DashController(QMainWindow):
                     "Estado do relé atualizado, mas o evento não foi persistido."
                 )
 
+        # Verifica a proteção automática após processar a telemetria
+        if self.medicao_atual is not None:
+            self.verificar_protecao_sobrecorrente()
+
     # Registra os dados brutos recebidos do Arduino
-    def registrar_telemetria_bruta(self, dados):
+    def registrar_telemetria_bruta(self, dados, rele_ligado=True):
         # Guarda o instante da leitura
         instante = datetime.now()
 
@@ -1123,10 +1425,11 @@ class DashController(QMainWindow):
             raise ValueError("Estado do relé inválido")
 
         # Organiza os dados recebidos
+        # Com o relé aberto os sinais são registrados como 0 (curva mostra o corte)
         leitura = {
             "timestamp": instante,
-            "a0": a0,
-            "a1": a1,
+            "a0": a0 if rele_ligado else 0,
+            "a1": a1 if rele_ligado else 0,
             "status_botao": status_botao,
             "status_rele": status_rele
         }
