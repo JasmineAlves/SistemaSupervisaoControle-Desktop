@@ -6,7 +6,6 @@ from PySide6.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox # Base 
 from ui.Ui_dashboard import Ui_MainWindow # Interface criada pelo Qt Designer
 from models.medicao import Medicao # Medições
 from models.registro import Registro # Evento registrado no sistema
-from models.simulacao import Simulador
 from controllers.comunicacao_controller import ComunicacaoController
 from controllers.configuracao_controller import ConfiguracaoController
 from models.configuracao import Configuracao
@@ -33,33 +32,11 @@ class DashController(QMainWindow):
         # Indica se o filtro de data está ativo
         self.filtro_data_ativo = False
 
-        # Faz a simulação de uma medição inicial
-        self.medicao_atual = Medicao(
-            v=220.0,
-            i=8.0,
-            disjuntor=True # Fechado 
-        )
-
-        self.simulador = Simulador()
-
-        # Guarda os dados do gráfico das últimas 24 horas
-        self.historico_potencia = []
-
-        # Guarda somente os dados usados no tempo real
-        self.historico_tempo_real = []
-
-        # Intervalo dos pontos do histórico de 24 horas
-        # Um ponto a cada 30 minutos evita acumular centenas de pontos no canto.
-        self.intervalo_historico = timedelta(minutes=30)
-
-        # Controla se o gráfico acompanha em tempo real a última medição
-        self.modo_tempo_real = False
-
         # Guarda os registros de eventos do sistema
         self.registros = []
 
-        # Guarda o estado anterior do disjuntor
-        self.disjuntor_anterior = self.medicao_atual.disjuntor
+        # Guarda o histórico das leituras brutas recebidas do Arduino
+        self.historico_adc = []
 
         # Guarda se o limite de potência já foi ultrapassado
         self.limite_ultrapassado = False
@@ -67,12 +44,27 @@ class DashController(QMainWindow):
         # Se a potência ultrapassar o limite configurado por esse fator, disjuntor dispara sozinho
         self.fator_sobrecorrente = 1.5
         self.medicao_disparo = None
+        # A proteção permanece desativada até a calibração das medições do Arduino
+        self.protecao_automatica_habilitada = False
+
+        # Guarda a última medição recebida do hardware
+        self.medicao_atual = None
+        # Guarda o estado anterior do disjuntor, inicialmente desconhecido
+        self.disjuntor_anterior = None
+
+        self.dados_serial_atual = None
+        self.acao_rele_pendente = None
+
+        self.timer_confirmacao_rele = QTimer(self)
+        self.timer_confirmacao_rele.setSingleShot(True)
+        self.timer_confirmacao_rele.timeout.connect(
+            self.ao_expirar_confirmacao_rele
+        )
+
+        self.modo_tempo_real = False
 
         # Configura o gráfico, chama a função que cria o gráfico
         self.configurar_grafico()
-
-        # Carrega dados iniciais para o gráfico, cria dados simulados
-        self.carregar_historico_inicial()
 
         # Configura a tabela de registros, define tamanho das colunas
         self.configurar_tabela()
@@ -83,23 +75,15 @@ class DashController(QMainWindow):
         # Att interface p/ exibir eventos recuperados
         self.atualizar_tabela()
 
-        # Registra evento p/ indicar que sistema iniciou
+        # Registra evento p/ indicar que sistema iniciou supervisao
         self.adicionar_registro(
             tipo="Status",
-            descricao="Sistema de supervisão iniciado.",
-            valor=self.formatar_medicao()
+            descricao="Sistema de supervisão iniciado. Aguardando dados do Arduino.",
+            valor="Sem medição"
         )
-
-        # Temporizador que atualiza periodicamente, timer dispara a função atualizar_medicao() é executada
-        self.timer = QTimer()
-
-        self.timer.timeout.connect(self.atualizar_medicao)
 
         # Medição inicial
         self.atualizar_dashboard()
-
-        # Att a telemetria a cada 1s
-        self.timer.start(1000)
 
         # Modelo compartilhado de configuração (carrega do arquivo na inicialização)
         self.model_config = Configuracao()
@@ -123,8 +107,12 @@ class DashController(QMainWindow):
         self.ui.spin_limite_potencia.valueChanged.connect(self.marcar_limite_pendente)
         self.ui.btn_ok_limite.clicked.connect(self.confirmar_limite_potencia)
 
-        # Guarda instância do controller de comunicação
+        # Guarda instância do controller de comunicação serial
         self.comunicacao_controller = ComunicacaoController(self)
+        # Conecta o sinal de dados recebidos ao método responsável q recebe na dash
+        self.comunicacao_controller.dados_serial_recebidos.connect(
+            self.ao_receber_dados_serial
+        )
 
         # Abre a janela de comunicação serial
         self.ui.btn_comunicacao.clicked.connect(self.abrir_comunicacao)
@@ -194,412 +182,363 @@ class DashController(QMainWindow):
         self.atualizar_tabela()
         return True
 
-    # Confirma corte/reativação do sistema
+    # Confirma corte/reativação do sistema por Arduino
     def alternar_corte_emergencia(self):
+        # Evita enviar comandos enquanto outro aguarda confirmação
+        if self.acao_rele_pendente is not None:
+            QMessageBox.warning(
+                self,
+                "Operação pendente",
+                "Aguarde a confirmação da operação atual pelo Arduino."
+            )
+            return
+
+        # Define a ação de acordo com o estado atual
         if not self.corte_emergencia_ativo:
-            # Solicita confirmação antes
             resposta = QMessageBox.question(
                 self,
                 "Corte de emergência",
                 "Deseja realizar o corte de emergência?"
             )
-            # Se cancelar, encerra sem alteração
+
             if resposta != QMessageBox.StandardButton.Yes:
                 return
 
-            # Persiste estado + evento antes de mexer no simulador
-            sucesso = self.executar_corte(
-                aberto=True,
-                tipo="Alerta",
-                descricao="Corte de emergência acionado."
-            )
-            # Se falhar, mantém interface/simulador
-            if not sucesso:
-                return
+            acao = {
+                "aberto": True,
+                "status_esperado": 0,
+                "tipo": "Alerta",
+                "descricao": "Corte de emergência acionado."
+            }
 
-            # Att o simulador após confirmação
-            self.simulador.alterar_disjuntor(False)
-            # Gera medição = instalação desenergizada
-            self.medicao_atual = self.simulador.gerar_medicao()
-            # Sincroniza o estado anterior (evita registro duplicado)
-            self.disjuntor_anterior = self.medicao_atual.disjuntor
-            # Att indicador de corte de emergência
-            self.corte_emergencia_ativo = True
-            self.atualizar_dashboard()
-            # Altera o botão para permitir a reativação
-            self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
+            comando = "!0"
 
         else:
-            # Solicita confirmação antes
             resposta = QMessageBox.question(
                 self,
                 "Reativar sistema",
                 "Deseja reativar o sistema?"
             )
-            # Se cancelar, encerra sem alteração
+
             if resposta != QMessageBox.StandardButton.Yes:
                 return
 
-            # Persiste estado + evento antes de mexer no simulador
-            sucesso = self.executar_corte(
-                aberto=False,
-                tipo="Status",
-                descricao="Sistema reativado após corte de emergência."
+            acao = {
+                "aberto": False,
+                "status_esperado": 1,
+                "tipo": "Status",
+                "descricao": "Sistema reativado após corte de emergência."
+            }
+
+            comando = "!1"
+
+        # Envia o comando diretamente ao Arduino
+        try:
+            enviado = self.comunicacao_controller.model.enviar_comando(comando)
+        except Exception as erro:
+            logger.exception("Erro ao enviar comando para o relé")
+
+            QMessageBox.critical(
+                self,
+                "Erro de comunicação",
+                f"Não foi possível enviar o comando ao Arduino.\n\n{erro}"
             )
-            # Se falhar, mantém interface/simulador
-            if not sucesso:
-                return
+            return
+
+        # Verifica se o comando foi enviado
+        if not enviado:
+            QMessageBox.warning(
+                self,
+                "Falha no comando",
+                "O comando não foi enviado ao Arduino."
+            )
+            return
+
+        # Guarda a ação até receber a confirmação pela telemetria
+        self.acao_rele_pendente = acao
+
+        # Aguarda até 3 segundos pela confirmação do relé
+        self.timer_confirmacao_rele.start(3000)
+
+        logger.info("Comando %s enviado. Aguardando confirmação do Arduino.", comando)
 
 
-            # Att o simulador após confirmação
-            self.simulador.alterar_disjuntor(True)
-            # Gera medição = instalação energizada
-            self.medicao_atual = self.simulador.gerar_medicao()
-            # Sincroniza o estado anterior (evita registro duplicado)
-            self.disjuntor_anterior = self.medicao_atual.disjuntor
-            # Att indicador de corte de emergência
-            self.corte_emergencia_ativo = False
-            self.atualizar_dashboard()
-            # Restaura o texto original do botão
-            self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
+    # Trata o caso em que o Arduino não confirma o comando enviado
+    def ao_expirar_confirmacao_rele(self):
+        # Guarda a operação que não recebeu confirmação
+        acao = self.acao_rele_pendente
 
+        # Limpa a operação pendente
+        self.acao_rele_pendente = None
+
+        if acao is None:
+            return
+        logger.warning(
+            "Timeout aguardando confirmação do relé. "
+            "Estado esperado: %s",
+            acao["status_esperado"]
+        )
+        QMessageBox.warning(
+            self,
+            "Sem confirmação do Arduino",
+            (
+                "O comando foi enviado, mas não houve confirmação do estado do relé.\n\n"
+                "O estado do sistema não será atualizado na interface."
+            )
+        )
 
     # Cria e configura gráfico
     def configurar_grafico(self):
-        # Cria o gráfico de demanda de potência
-
+        # Cria o gráfico principal
         self.grafico = pg.PlotWidget()
-
         self.grafico.setBackground("w")
 
         self.grafico.setTitle(
-            "Demanda de potência",
+            "Sinais dos circuitos de medição",
             color="#24343B",
             size="12pt"
         )
 
-        self.grafico.setLabel(
-            "left",
-            "Potência",
-            units="W"
-        )
+        self.grafico.setLabel("left", "Valor ADC")
+        self.grafico.setLabel("bottom", "Horário")
+        self.grafico.setYRange(0, 1023)
 
-        self.grafico.setLabel(
-            "bottom",
-            "Horário"
-        )
-
-        self.grafico.showGrid(
-            x=True,
-            y=True,
-            alpha=0.15
-        )
-
+        self.grafico.showGrid(x=True, y=True, alpha=0.15)
         self.grafico.setMinimumHeight(190)
 
-        # Coloca o gráfico na área reservada da dashboard
+        # Utiliza eixo com horário
+        eixo_tempo = pg.DateAxisItem(orientation="bottom")
+        self.grafico.setAxisItems({"bottom": eixo_tempo})
+
+        # Legenda das curvas
+        self.grafico.addLegend()
+
+        # Curva do sinal A0
+        self.curva_a0 = self.grafico.plot(
+            pen=pg.mkPen(color="#2878B8", width=2),
+            name="A0"
+        )
+
+        # Curva do sinal A1
+        self.curva_a1 = self.grafico.plot(
+            pen=pg.mkPen(color="#D97732", width=2),
+            name="A1"
+        )
+
+        # Insere o gráfico no layout da dashboard
         layout = self.ui.widget_grafico.layout()
 
         if layout is None:
             from PySide6.QtWidgets import QVBoxLayout
-
-            layout = QVBoxLayout(
-                self.ui.widget_grafico
-            )
+            layout = QVBoxLayout(self.ui.widget_grafico)
 
         layout.addWidget(self.grafico)
 
-        # Cria o eixo horizontal usando data e hora
-        eixo_tempo = pg.DateAxisItem(
-            orientation="bottom"
-        )
-
-        self.grafico.setAxisItems({
-            "bottom": eixo_tempo
-        })
-
-        # Curva do histórico das últimas 24 horas
-        self.curva_potencia = self.grafico.plot(
-            pen=pg.mkPen(
-                color="#245A63",
-                width=2
-            )
-        )
-
-        # Curva exclusiva do modo Tempo Real.
-        # Não compartilha os pontos do histórico de 24 horas.
-        self.curva_tempo_real = self.grafico.plot(
-            pen=pg.mkPen(
-                color="#B07A00",
-                width=2
-            )
-        )
-        self.curva_tempo_real.setVisible(False)
-
-    def carregar_historico_inicial(self):
-        # Cria dados simulados das últimas 24 horas
-
-        agora = datetime.now()
-
-        quantidade_pontos = 48 # 24horas / 48pontos = 0,5 hora cada ponto
-
-        for indice in range(quantidade_pontos):
-            # Horário de cada ponto distribuido
-            momento = agora - timedelta(
-                hours=24 - (indice * 0.5)
-            )
-
-            # Gera uma nova medição simulada com base no estado atual do disjuntor
-            medicao = self.simulador.gerar_medicao()
-
-            # Obtém a potência calculada da medição simulada
-            potencia = medicao.potencia
-
-            # Adiciona um dicionário na lista
-            self.historico_potencia.append(
-                {
-                    "timestamp": momento,
-                    "potencia": potencia
-                }
-            )
-
-
-        agora = datetime.now()
-        inicio = agora - timedelta(hours=24)
-
-        self.grafico.setXRange(
-            inicio.timestamp(),
-            agora.timestamp(),
-            padding=0
-        )
-        # Att o gráfico com os dados iniciais
-        self.atualizar_grafico()
 
     def atualizar_grafico(self):
-        # Atualiza o gráfico de acordo com o modo selecionado.
+        # Não atualiza o gráfico sem leituras
+        if not self.historico_adc:
+            return
+
+        agora = datetime.now()
 
         if self.modo_tempo_real:
-            # ==========================================================
-            # MODO TEMPO REAL
-            # ==========================================================
+            # Exibe somente as leituras dos últimos 60 segundos
+            limite = agora - timedelta(seconds=60)
 
-            if not self.historico_tempo_real:
-                return
-
-            valores = [
-                item["potencia"]
-                for item in self.historico_tempo_real
+            historico = [
+                item
+                for item in self.historico_adc
+                if item["timestamp"] >= limite
             ]
-
-            tempos = [
-                item["timestamp"].timestamp()
-                for item in self.historico_tempo_real
-            ]
-
-            # curva em tempo real
-            self.curva_potencia.setVisible(False)
-            self.curva_tempo_real.setVisible(True)
-
-            self.curva_tempo_real.setData(
-                tempos,
-                valores
-            )
-
-            ultimo_tempo = tempos[-1]
-            inicio = ultimo_tempo - 60
-
-            self.grafico.setXRange(
-                inicio,
-                ultimo_tempo,
-                padding=0
-            )
-
         else:
-            # 24h
-            if not self.historico_potencia:
-                return
+            # Exibe as leituras das últimas 24 horas
+            limite = agora - timedelta(hours=24)
 
-            valores = [
-                item["potencia"]
-                for item in self.historico_potencia
+            historico = [
+                item
+                for item in self.historico_adc
+                if item["timestamp"] >= limite
             ]
 
-            tempos = [
-                item["timestamp"].timestamp()
-                for item in self.historico_potencia
-            ]
+        if not historico:
+            self.curva_a0.setData([], [])
+            self.curva_a1.setData([])
+            return
 
-            # Mostra o histórico de 24 horas
-            self.curva_tempo_real.setVisible(False)
-            self.curva_potencia.setVisible(True)
+        tempos = [
+            item["timestamp"].timestamp()
+            for item in historico
+        ]
 
-            self.curva_potencia.setData(
-                tempos,
-                valores
-            )
+        valores_a0 = [
+            item["a0"]
+            for item in historico
+        ]
 
-            # Mantém a janela das 24 horas estável
-            if self.historico_potencia:
-                fim = self.historico_potencia[-1]["timestamp"]
-                inicio = fim - timedelta(hours=24)
+        valores_a1 = [
+            item["a1"]
+            for item in historico
+        ]
 
-                self.grafico.setXRange(
-                    inicio.timestamp(),
-                    fim.timestamp(),
-                    padding=0
-                )
+        # Atualiza as duas curvas
+        self.curva_a0.setData(tempos, valores_a0)
+        self.curva_a1.setData(tempos, valores_a1)
+
+        # Ajusta o eixo horizontal ao intervalo exibido
+        if self.modo_tempo_real:
+            inicio = (agora - timedelta(seconds=60)).timestamp()
+            fim = agora.timestamp()
+        else:
+            inicio = limite.timestamp()
+            fim = agora.timestamp()
+
+        self.grafico.setXRange(inicio, fim, padding=0)
 
     def alternar_tempo_real(self):
         self.modo_tempo_real = not self.modo_tempo_real
 
         if self.modo_tempo_real:
+            self.ui.btn_tempo_real.setText("24 Horas")
+        else:
             self.ui.btn_tempo_real.setText("Tempo Real")
 
-            # Começa uma série nova somente para o tempo real 
-            self.historico_tempo_real = [
-                {
-                    "timestamp": self.medicao_atual.timestamp,
-                    "potencia": self.medicao_atual.potencia
-                }
-            ]
+        self.atualizar_grafico()
 
-            self.atualizar_grafico()
+    # Processa medição recebida do hardware
+    def processar_medicao(self, medicao):
+        # Guarda medição recebida como medição atual
+        self.medicao_atual = medicao
 
-        else:
-            self.ui.btn_tempo_real.setText("24 Horas")
-
-            # Ao voltar para 24 horas, o gráfico usa somente
-            # os pontos históricos de 30 em 30 minutos.
-            self.atualizar_grafico()
-
-    # Chegada de uma nova simulação
-    def atualizar_medicao(self):
-        # Simula uma nova medição recebida, como se fosse um hardware
-
-        # Gera uma nova medição simulada
-        self.medicao_atual = self.simulador.gerar_medicao()
-
-
-        # 24h
-        # O último ponto mantém seu horário original e só é criado um novo ponto quando completar 30 minutos.
+        # Att o histórico de potência de 24 horas
         if not self.historico_potencia:
-            self.historico_potencia.append(
-                {
-                    "timestamp": self.medicao_atual.timestamp,
-                    "potencia": self.medicao_atual.potencia
-                }
-            )
+            # Adiciona o primeiro ponto do histórico
+            self.historico_potencia.append({
+                "timestamp": medicao.timestamp,
+                "potencia": medicao.potencia
+            })
         else:
+            # Obtém o último ponto armazenado
             ultimo = self.historico_potencia[-1]
-
+            # Verifica se passou o intervalo de 30 minutos
             if (
-                self.medicao_atual.timestamp - ultimo["timestamp"]
+                medicao.timestamp - ultimo["timestamp"]
                 >= self.intervalo_historico
             ):
-                self.historico_potencia.append(
-                    {
-                        "timestamp": self.medicao_atual.timestamp,
-                        "potencia": self.medicao_atual.potencia
-                    }
-                )
+                # Adiciona um novo ponto ao histórico
+                self.historico_potencia.append({
+                    "timestamp": medicao.timestamp,
+                    "potencia": medicao.potencia
+                })
 
-        # Mantém somente as medições das últimas 24 horas
+        # Define o limite de 24 horas para o histórico
         limite = datetime.now() - timedelta(hours=24)
 
+        # Remove os pontos que ultrapassaram as últimas 24 horas
         self.historico_potencia = [
             item
             for item in self.historico_potencia
             if item["timestamp"] >= limite
         ]
 
-        # Tempo real
-        # Só acumula pontos quando o modo Tempo Real estiver ativo
+        # Verifica se o modo tempo real está ativo
         if self.modo_tempo_real:
-            self.historico_tempo_real.append(
-                {
-                    "timestamp": self.medicao_atual.timestamp,
-                    "potencia": self.medicao_atual.potencia
-                }
-            )
-
-            # Mantém somente os últimos 60 segundos.
+            # Adiciona a nova medição ao gráfico em tempo real
+            self.historico_tempo_real.append({
+                "timestamp": medicao.timestamp,
+                "potencia": medicao.potencia
+            })
+            # Define o limite de 60 segundos
             limite_tempo_real = (
-                self.medicao_atual.timestamp - timedelta(seconds=60)
+                medicao.timestamp - timedelta(seconds=60)
             )
-
+            # Mantém somente os pontos dos últimos 60 segundos
             self.historico_tempo_real = [
                 item
                 for item in self.historico_tempo_real
                 if item["timestamp"] >= limite_tempo_real
             ]
 
-        # Simula a ativação automática do disjuntor 
+        # Conf a proteção de sobrecorrente
         self.verificar_protecao_sobrecorrente()
-
-        # Verifica se aconteceu algum evento
+        # Conf eventos relacionados à medição
         self.verificar_eventos()
-
-        # Atualiza os dados da interface
+        # Att indicadores da dashboard
         self.atualizar_dashboard()
-
-        # Atualiza o gráfico
+        # Att gráfico
         self.atualizar_grafico()
 
+    
     def atualizar_dashboard(self):
-        # Exibe na interface oq veio da medição
-        
-        # Coloca os valores na interface, tensão, corrente, potência e estado disjuntor
-        medicao = self.medicao_atual
+        # Exibe na interface oq veio da medição/att indicadores
+        # Verifica se existe telemetria recebida
+        if self.dados_serial_atual is None:
+            self.ui.lbl_valor_tensao.setText("--")
+            self.ui.lbl_valor_corrente.setText("--")
+            self.ui.lbl_valor_potencia.setText("--")
 
-        # Att tensão
-        self.ui.lbl_valor_tensao.setText(
-            f"{medicao.tensao:.1f}"
-        )
+            self.ui.lbl_status_disjuntor.setText("AGUARDANDO MEDIÇÃO")
+            self.ui.lbl_status_detalhe.setText(
+                "Aguardando dados do Arduino."
+            )
 
-        # Att corrente
-        self.ui.lbl_valor_corrente.setText(
-            f"{medicao.corrente:.1f}"
-        )
+            self.ui.lbl_status_atualizacao.setText(
+                "Última atualização: --"
+            )
 
-        # Att potência
-        self.ui.lbl_valor_potencia.setText(
-            f"{medicao.potencia:.1f}"
-        )
+            return
 
-        # Atualiza estado do disjuntor
-        if medicao.disjuntor: # Se True
-            self.ui.lbl_status_disjuntor.setText( 
+        dados = self.dados_serial_atual
+
+        # Grandezas elétricas ainda não possuem calibração
+        self.ui.lbl_valor_tensao.setText("--")
+        self.ui.lbl_valor_corrente.setText("--")
+        self.ui.lbl_valor_potencia.setText("--")
+
+        # Estado real informado pelo Arduino
+        status_rele = int(dados["status_rele"])
+
+        if status_rele == 1:
+            self.ui.lbl_status_disjuntor.setText(
                 "FECHADO / NORMAL"
             )
 
             self.ui.lbl_status_detalhe.setText(
-                "Instalação energizada e proteção disponível."
+                f"Relé energizado | "
+                f"A0: {dados['a0']} | "
+                f"A1: {dados['a1']} | "
+                f"Botão: {dados['status_botao']}"
             )
+
             estado = "fechado"
 
-
-        else: # Se False
+        else:
             self.ui.lbl_status_disjuntor.setText(
                 "ABERTO / PROTEÇÃO ATIVADA"
             )
 
             self.ui.lbl_status_detalhe.setText(
-                "A instalação encontra-se desenergizada."
+                f"Relé desenergizado | "
+                f"A0: {dados['a0']} | "
+                f"A1: {dados['a1']} | "
+                f"Botão: {dados['status_botao']}"
             )
+
             estado = "aberto"
 
-        # Atualiza cor e card de texto
+        # Atualiza estado visual
         self.ui.statusCard.setProperty("estado", estado)
         self.ui.lbl_status_disjuntor.setProperty("estado", estado)
 
-        for widget in (self.ui.statusCard, self.ui.lbl_status_disjuntor):
+        for widget in (
+            self.ui.statusCard,
+            self.ui.lbl_status_disjuntor
+        ):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
 
-        # Atualiza o horário da última medição
-        horario = medicao.timestamp.strftime(
-            "%H:%M:%S"
-        )
+        # Horário da última telemetria
+        horario = datetime.now().strftime("%H:%M:%S")
 
         self.ui.lbl_status_atualizacao.setText(
             f"Última atualização: {horario}"
@@ -638,6 +577,13 @@ class DashController(QMainWindow):
             )
 
     def verificar_protecao_sobrecorrente(self):
+        # Impede o acionamento com medições simuladas ou não calibradas
+        if not self.protecao_automatica_habilitada:
+            return
+        # Impede a avaliação sem uma medição válida
+        if self.medicao_atual is None:
+            return
+        
         # Usa somente o limite de potência confirmado
         limite = self.limite_potencia_aplicado
         sobrecorrente_severa = (
@@ -975,11 +921,17 @@ class DashController(QMainWindow):
         self.atualizar_tabela()
 
     def formatar_medicao(self):
-        # Formata a medição para mostrar nos registros
+        # Conf se existe telemetria disponível
+        if self.dados_serial_atual is None:
+            return "Sem telemetria disponível"
+
+        dados = self.dados_serial_atual
+
         return (
-            f"{self.medicao_atual.tensao:.1f} V / "
-            f"{self.medicao_atual.corrente:.1f} A / "
-            f"{self.medicao_atual.potencia:.1f} W"
+            f"A0: {dados['a0']} | "
+            f"A1: {dados['a1']} | "
+            f"Relé: {dados['status_rele']} | "
+            f"Botão: {dados['status_botao']}"
         )
 
     def formatar_medicao_customizada(self, medicao):
@@ -1091,9 +1043,6 @@ class DashController(QMainWindow):
 
     # closeEvent = método definido pelo Qt, NÃO pode mudar nomeação
     def closeEvent(self, event):
-        # Interrompe timer que faz atts do dash
-        self.timer.stop()
-
         # Encerra a comunicação serial antes de destruir a janela
         if (
             self.comunicacao_controller.model.is_connected
@@ -1105,3 +1054,170 @@ class DashController(QMainWindow):
             self.comunicacao_controller.ao_desconectar()
         # Permite que a janela seja fechada após o encerramento da comunicação
         event.accept()
+
+    # Recebe dados interpretados enviados pelo controller de comunicação
+    def ao_receber_dados_serial(self, dados: dict):
+        # Registra os dados recebidos no log
+        logger.debug("Dados recebidos na dashboard: %s", dados)
+
+        # Verifica se todos os campos esperados foram recebidos
+        campos_necessarios = {
+            "a0",
+            "a1",
+            "status_botao",
+            "status_rele"
+        }
+
+        if not campos_necessarios.issubset(dados.keys()):
+            logger.warning("Dados serial recebidos incompletos: %s", dados)
+            return
+
+        # Registra as leituras brutas para utilização posterior nos gráficos
+        try:
+            self.registrar_telemetria_bruta(dados)
+        except (ValueError, TypeError, KeyError) as erro:
+            logger.warning("Falha ao registrar telemetria bruta: %s", erro)
+            return
+
+        # Converte o estado do relé para inteiro
+        try:
+            status_rele = int(dados["status_rele"])
+        except (ValueError, TypeError):
+            logger.warning("Estado do relé inválido recebido: %s", dados)
+            return
+
+        if status_rele not in (0, 1):
+            logger.warning("Estado do relé fora do padrão: %s", status_rele)
+            return
+
+        # Guarda os dados recebidos do Arduino para usar na dash
+        self.dados_serial_atual = dados
+
+        # Converte o estado recebido para o estado lógico do sistema
+        rele_ligado = status_rele == 1
+
+        # Verifica se existe uma operação aguardando confirmação
+        if self.acao_rele_pendente is not None:
+            acao = self.acao_rele_pendente
+
+            # Aguarda a telemetria apresentar o estado solicitado
+            if status_rele != acao["status_esperado"]:
+                return
+
+            # Cancela o timeout, pois o Arduino confirmou
+            self.timer_confirmacao_rele.stop()
+            self.acao_rele_pendente = None
+
+            logger.info("Comando do relé confirmado pela telemetria.")
+
+            # Registra o evento confirmado no banco
+            sucesso = self.executar_corte(
+                aberto=acao["aberto"],
+                tipo=acao["tipo"],
+                descricao=acao["descricao"]
+            )
+
+            # Atualiza a interface conforme o estado real informado pelo Arduino
+            self.corte_emergencia_ativo = not rele_ligado
+            self.disjuntor_anterior = rele_ligado
+
+            if self.corte_emergencia_ativo:
+                self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
+            else:
+                self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
+
+            self.atualizar_dashboard()
+
+            # Informa caso o estado físico tenha sido confirmado,
+            # mas o registro no banco tenha falhado
+            if not sucesso:
+                logger.error(
+                    "O relé confirmou a alteração, mas o registro do evento falhou."
+                )
+
+            return
+
+        # Sincroniza o estado inicial com o hardware
+        if self.disjuntor_anterior is None:
+            self.disjuntor_anterior = rele_ligado
+            self.corte_emergencia_ativo = not rele_ligado
+
+            if self.corte_emergencia_ativo:
+                self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
+            else:
+                self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
+
+            self.atualizar_dashboard()
+            return
+
+        # Detecta alterações de estado realizadas diretamente no hardware
+        if rele_ligado != self.disjuntor_anterior:
+            aberto = not rele_ligado
+
+            # Registra a alteração identificada pela telemetria
+            sucesso = self.executar_corte(
+                aberto=aberto,
+                tipo="Alerta" if aberto else "Status",
+                descricao=(
+                    "Relé desligado pelo hardware."
+                    if aberto
+                    else "Relé ligado pelo hardware."
+                )
+            )
+
+            # Atualiza o estado conforme a telemetria, independentemente do registro
+            self.disjuntor_anterior = rele_ligado
+            self.corte_emergencia_ativo = aberto
+
+            if aberto:
+                self.ui.btn_corte_emergencia.setText("▶  REATIVAR SISTEMA")
+            else:
+                self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
+
+            self.atualizar_dashboard()
+
+            if not sucesso:
+                logger.error(
+                    "Estado do relé atualizado, mas o evento não foi persistido."
+                )
+
+    # Registra os dados brutos recebidos do Arduino
+    def registrar_telemetria_bruta(self, dados):
+        # Guarda o instante da leitura
+        instante = datetime.now()
+
+        # Converte e valida os sinais recebidos
+        a0 = int(dados["a0"])
+        a1 = int(dados["a1"])
+        status_botao = int(dados["status_botao"])
+        status_rele = int(dados["status_rele"])
+
+        if not (0 <= a0 <= 1023 and 0 <= a1 <= 1023):
+            raise ValueError("Valor ADC fora da faixa de 0 a 1023")
+
+        if status_botao not in (0, 1):
+            raise ValueError("Estado do botão inválido")
+
+        if status_rele not in (0, 1):
+            raise ValueError("Estado do relé inválido")
+
+        # Organiza os dados recebidos
+        leitura = {
+            "timestamp": instante,
+            "a0": a0,
+            "a1": a1,
+            "status_botao": status_botao,
+            "status_rele": status_rele
+        }
+
+        # Adiciona a leitura ao histórico
+        self.historico_adc.append(leitura)
+
+        # Mantém o histórico em memória limitado
+        # Evita crescimento ilimitado durante a execução
+        if len(self.historico_adc) > 1000:
+            self.historico_adc.pop(0)
+
+        # Atualiza o gráfico e os indicadores
+        self.atualizar_grafico()
+        self.atualizar_dashboard()

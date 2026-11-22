@@ -3,11 +3,14 @@ from ui.Ui_comunicacao import Ui_Form
 from models.comunicacao import ComunicacaoModel
 from PySide6.QtWidgets import QDialog, QMessageBox
 from models.leitura_serial import LeituraSerial
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Signal
 
 logger = logging.getLogger(__name__)
 
 class ComunicacaoController(QDialog):
+    # Cria signal p/ enviar dados interpretados pra outros controllers
+    dados_serial_recebidos = Signal(dict)
+
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
 
@@ -202,9 +205,14 @@ class ComunicacaoController(QDialog):
         self.leitura_serial.start()
 
     def ao_receber_dados(self, dados: dict):
+        # Mostra dados interpretados no terminal
         print(f"DADOS INTERPRETADOS: {dados}", flush=True)
+
         # Recebe dados validados pelo protocolo certinho
         logger.debug("Dados serial recebidos: %s", dados)
+
+        # Emite signal que contem os dados recebidos (isso faz com q outros controllers sejam notificados)
+        self.dados_serial_recebidos.emit(dados)
 
     def ao_receber_mensagem_bruta(self, mensagem: str):
         # Registra mensagem original recebida

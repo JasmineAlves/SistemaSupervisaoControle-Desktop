@@ -1,5 +1,5 @@
 {
-  "porta_serial": "/dev/ttyS12",
-  "baud_rate": "115200",
+  "porta_serial": "/dev/ttyACM0",
+  "baud_rate": "9600",
   "timeout_serial": 2.0
 }
