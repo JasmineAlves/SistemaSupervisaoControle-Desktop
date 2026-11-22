@@ -125,7 +125,7 @@ class DashController(QMainWindow):
         self.ui.btn_limpar_filtro.clicked.connect(self.limpar_filtro_data)
 
 
-    # Monta evento com medição atual antes de alterar o simulador
+    # Monta evento com medição atual antes de registrar corte
     def executar_corte(self, aberto, tipo, descricao):
         registro = Registro(
             tipo=tipo,
@@ -146,7 +146,7 @@ class DashController(QMainWindow):
                 erro
             )
 
-            # Informa a falha sem modificar o estado do simulador
+            # Informa a falha sem modificar o estado
             QMessageBox.critical(
                 self,
                 "Erro ao alterar disjuntor",
@@ -404,70 +404,6 @@ class DashController(QMainWindow):
             self.ui.btn_tempo_real.setText("Tempo Real")
 
         self.atualizar_grafico()
-
-    # Processa medição recebida do hardware
-    def processar_medicao(self, medicao):
-        # Guarda medição recebida como medição atual
-        self.medicao_atual = medicao
-
-        # Att o histórico de potência de 24 horas
-        if not self.historico_potencia:
-            # Adiciona o primeiro ponto do histórico
-            self.historico_potencia.append({
-                "timestamp": medicao.timestamp,
-                "potencia": medicao.potencia
-            })
-        else:
-            # Obtém o último ponto armazenado
-            ultimo = self.historico_potencia[-1]
-            # Verifica se passou o intervalo de 30 minutos
-            if (
-                medicao.timestamp - ultimo["timestamp"]
-                >= self.intervalo_historico
-            ):
-                # Adiciona um novo ponto ao histórico
-                self.historico_potencia.append({
-                    "timestamp": medicao.timestamp,
-                    "potencia": medicao.potencia
-                })
-
-        # Define o limite de 24 horas para o histórico
-        limite = datetime.now() - timedelta(hours=24)
-
-        # Remove os pontos que ultrapassaram as últimas 24 horas
-        self.historico_potencia = [
-            item
-            for item in self.historico_potencia
-            if item["timestamp"] >= limite
-        ]
-
-        # Verifica se o modo tempo real está ativo
-        if self.modo_tempo_real:
-            # Adiciona a nova medição ao gráfico em tempo real
-            self.historico_tempo_real.append({
-                "timestamp": medicao.timestamp,
-                "potencia": medicao.potencia
-            })
-            # Define o limite de 60 segundos
-            limite_tempo_real = (
-                medicao.timestamp - timedelta(seconds=60)
-            )
-            # Mantém somente os pontos dos últimos 60 segundos
-            self.historico_tempo_real = [
-                item
-                for item in self.historico_tempo_real
-                if item["timestamp"] >= limite_tempo_real
-            ]
-
-        # Conf a proteção de sobrecorrente
-        self.verificar_protecao_sobrecorrente()
-        # Conf eventos relacionados à medição
-        self.verificar_eventos()
-        # Att indicadores da dashboard
-        self.atualizar_dashboard()
-        # Att gráfico
-        self.atualizar_grafico()
-
     
     def atualizar_dashboard(self):
 
@@ -590,7 +526,7 @@ class DashController(QMainWindow):
             )
 
     def verificar_protecao_sobrecorrente(self):
-        # Impede o acionamento com medições simuladas ou não calibradas
+        # Impede o acionamento com medições não calibradas
         if not self.protecao_automatica_habilitada:
             return
         # Impede a avaliação sem uma medição válida
@@ -637,7 +573,7 @@ class DashController(QMainWindow):
                 "Erro na proteção",
                 (
                     "Não foi possível registrar o corte automático no banco. "
-                    "O estado do simulador não será alterado.\n\n"
+                    "O estado não será alterado.\n\n"
                     "Consulte logs/smartgrid.log para mais detalhes."
                 )
             )
@@ -647,9 +583,6 @@ class DashController(QMainWindow):
         registro.id = id_registro
         self.registros.insert(0, registro)
         self.atualizar_tabela()
-        # Altera o simulador
-        self.simulador.alterar_disjuntor(False)
-        self.medicao_atual = self.simulador.gerar_medicao()
 
         # Registra log no smartgrid.log
         logger.warning(
@@ -680,48 +613,9 @@ class DashController(QMainWindow):
 
     def verificar_eventos(self):
         # Verifica se aconteceu alguma mudança relevante
-
         medicao = self.medicao_atual
-
-        # Verifica mudança no estado do disjuntor
-        if medicao.disjuntor != self.disjuntor_anterior:
-
-            if medicao.disjuntor:
-                self.adicionar_registro(
-                    tipo="Status",
-                    descricao="Disjuntor retornou ao estado normal.",
-                    valor=self.formatar_medicao()
-                )
-
-            else:
-                # Usa a medição guardada no instante do disparo
-                valor_disparo = (
-                    self.formatar_medicao_customizada(self.medicao_disparo)
-                    if self.medicao_disparo
-                    else self.formatar_medicao()
-                )
-
-                self.adicionar_registro(
-                    tipo="Alerta",
-                    descricao="Disjuntor aberto espontaneamente / proteção ativada.",
-                    valor=valor_disparo
-                )
-
-                QMessageBox.warning(
-                    self,
-                    "Proteção Ativada",
-                    "O disjuntor abriu espontaneamente devido a uma falha "
-                    "ou sobrecarga na instalação.\n\n"
-                    f"Medição no momento do disparo: {valor_disparo}"
-                )
-
-                if not self.corte_emergencia_ativo:
-                    self.corte_emergencia_ativo = True
-                    self.ui.btn_corte_emergencia.setText(
-                        "▶  REATIVAR SISTEMA"
-                    )
-
-            self.disjuntor_anterior = medicao.disjuntor
+        if medicao is None or medicao.potencia is None:
+            return
 
         # Usa somente o limite efetivamente aplicado.
         limite = self.limite_potencia_aplicado
@@ -1159,6 +1053,10 @@ class DashController(QMainWindow):
                 )
 
             return
+
+        # Verifica eventos relacionados à medição real
+        if self.medicao_atual is not None:
+            self.verificar_eventos()
 
         # Sincroniza o estado inicial com o hardware
         if self.disjuntor_anterior is None:
