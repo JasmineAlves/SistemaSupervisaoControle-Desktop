@@ -78,5 +78,26 @@ class Database:
                     )
                     VALUES (1, 0.0, 0.0, 0.0)
                 """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS leituras (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        data_hora TEXT NOT NULL
+                            DEFAULT CURRENT_TIMESTAMP,
+                        tensao REAL NOT NULL
+                            CHECK (tensao >= 0),
+                        corrente REAL NOT NULL,
+                        potencia REAL NOT NULL,
+                        disjuntor_fechado INTEGER NOT NULL
+                            CHECK (disjuntor_fechado IN (0, 1)),
+                        adc_tensao INTEGER NOT NULL
+                            CHECK (adc_tensao BETWEEN 0 AND 1023),
+                        adc_corrente INTEGER NOT NULL
+                            CHECK (adc_corrente BETWEEN 0 AND 1023)
+                    )
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_leituras_data_hora
+                    ON leituras (data_hora)
+                """)
         finally:
             conn.close()

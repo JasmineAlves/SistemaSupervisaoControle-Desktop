@@ -1,7 +1,7 @@
 # Controle da supervisão do sistema
 from datetime import datetime, timedelta # data/hora e intervalo de tempo
 import pyqtgraph as pg # desenhar gráficos
-from PySide6.QtCore import QTimer, QDate # Executa função a cada certo período e base para datas
+from PySide6.QtCore import QTimer, QDate, QThread, Signal # Executa função a cada certo período, base para datas e worker thread
 from PySide6.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox # Base da janela principal e texto dentro das células da tabela
 from ui.Ui_dashboard import Ui_MainWindow # Interface criada pelo Qt Designer
 from models.medicao import Medicao # Medições
@@ -10,6 +10,7 @@ from controllers.comunicacao_controller import ComunicacaoController
 from controllers.configuracao_controller import ConfiguracaoController
 from models.configuracao import Configuracao
 from models.registro_repository import RegistroRepository
+from models.leitura_worker import PersistenciaWorker
 import logging
 import math
 
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 # Classe principal
 class DashController(QMainWindow):
+    # Sinais que solicitam trabalho ao worker de persistência (Database Worker Thread)
+    # Conexão entre threads: o Qt entrega essas chamadas na thread do worker
+    solicitar_gravacao_leitura = Signal(object)
+    solicitar_historico_24h = Signal(object, object)
+    solicitar_consulta_periodo = Signal(object, object)
+
     def __init__(self):
         super().__init__()
 
@@ -36,8 +43,20 @@ class DashController(QMainWindow):
         # Guarda os registros de eventos do sistema
         self.registros = []
 
-        # Guarda o histórico das leituras brutas recebidas do Arduino
+        # Buffer ao vivo (modo "Tempo Real"), alimentado continuamente pela
+        # telemetria recebida - cobre a janela de 60s exibida nesse modo
         self.historico_adc = []
+        # Snapshot do modo "24 Horas", obtido por consulta ao SQLite
+        # (a 200Hz do protocolo, 24h de dados não cabem como buffer em memória)
+        self.historico_24h = []
+        # Snapshot do filtro por intervalo de datas (consulta avulsa)
+        self.historico_filtrado = []
+
+        # Throttle do redesenho do gráfico: a telemetria pode chegar a
+        # dezenas/centenas de leituras por segundo, e redesenhar a essa taxa
+        # é custo de GUI desnecessário (a persistência já roda em outra thread)
+        self.ultimo_redesenho_grafico = None
+        self.intervalo_redesenho_grafico = timedelta(seconds=0.1)
 
         # Guarda se o limite de potência já foi ultrapassado
         self.limite_ultrapassado = False
@@ -89,6 +108,38 @@ class DashController(QMainWindow):
 
         # Configura o gráfico, chama a função que cria o gráfico
         self.configurar_grafico()
+
+        # Database Worker Thread: isola gravações/consultas do SQLite da GUI thread
+        self.thread_persistencia = QThread(self)
+        self.worker_persistencia = PersistenciaWorker()
+        self.worker_persistencia.moveToThread(self.thread_persistencia)
+
+        # Pedidos da dashboard para o worker (entregues na thread dele)
+        self.solicitar_gravacao_leitura.connect(
+            self.worker_persistencia.gravar_leitura
+        )
+        self.solicitar_historico_24h.connect(
+            self.worker_persistencia.carregar_historico_24h
+        )
+        self.solicitar_consulta_periodo.connect(
+            self.worker_persistencia.consultar_periodo
+        )
+
+        # Respostas do worker para a dashboard (entregues de volta na GUI thread)
+        self.worker_persistencia.historico_24h_carregado.connect(
+            self.ao_historico_24h_carregado
+        )
+        self.worker_persistencia.historico_filtrado_carregado.connect(
+            self.ao_historico_filtrado_carregado
+        )
+        self.worker_persistencia.falha.connect(self.ao_falha_persistencia)
+
+        self.thread_persistencia.start()
+
+        # Pré-carrega o snapshot de 24h, pois é o modo inicial de exibição
+        # (modo_tempo_real = False). A resposta chega de forma assíncrona
+        # em ao_historico_24h_carregado
+        self.carregar_historico_24h()
 
         # Configura a tabela de registros, define tamanho das colunas
         self.configurar_tabela()
@@ -430,13 +481,17 @@ class DashController(QMainWindow):
 
 
     def atualizar_grafico(self):
-        # Não atualiza o gráfico sem leituras
-        if not self.historico_adc:
-            return
-
         agora = datetime.now()
 
-        if self.modo_tempo_real:
+        if self.filtro_data_ativo:
+            # Exibe somente o resultado da consulta por data
+            historico = self.historico_filtrado
+        elif self.modo_tempo_real:
+            # Buffer ao vivo, alimentado continuamente pela telemetria
+            # (a 200Hz do protocolo oficial, cobre bem mais que 60s em memória)
+            if not self.historico_adc:
+                return
+
             # Exibe somente as leituras dos últimos 60 segundos
             limite = agora - timedelta(seconds=60)
 
@@ -446,14 +501,10 @@ class DashController(QMainWindow):
                 if item["timestamp"] >= limite
             ]
         else:
-            # Exibe as leituras das últimas 24 horas
-            limite = agora - timedelta(hours=24)
-
-            historico = [
-                item
-                for item in self.historico_adc
-                if item["timestamp"] >= limite
-            ]
+            # Modo "24 Horas": é uma consulta histórica ao SQLite (snapshot),
+            # não uma janela sobre o buffer ao vivo — a 200Hz, 24h de dados
+            # não cabem em memória, por isso é recarregado ao entrar no modo
+            historico = self.historico_24h
 
         if not historico:
             self.curva_a0.setData([], [])
@@ -479,25 +530,65 @@ class DashController(QMainWindow):
         self.curva_a0.setData(tempos, valores_a0)
         self.curva_a1.setData(tempos, valores_a1)
 
-        # Ajusta o eixo horizontal ao intervalo exibido
-        if self.modo_tempo_real:
-            inicio = (agora - timedelta(seconds=60)).timestamp()
-            fim = agora.timestamp()
-        else:
-            inicio = limite.timestamp()
-            fim = agora.timestamp()
+        # Ajusta o eixo horizontal ao intervalo realmente exibido, em vez de
+        # sempre forçar a largura total da janela (60s/24h): assim a curva
+        # preenche o gráfico mesmo quando ainda há pouco dado acumulado
+        inicio = tempos[0]
+        fim = tempos[-1]
 
-        self.grafico.setXRange(inicio, fim, padding=0)
+        if fim == inicio:
+            # Evita um intervalo de largura zero com uma única leitura
+            fim = inicio + 1
+
+        self.grafico.setXRange(inicio, fim, padding=0.02)
 
     def alternar_tempo_real(self):
         self.modo_tempo_real = not self.modo_tempo_real
 
         if self.modo_tempo_real:
             self.ui.btn_tempo_real.setText("24 Horas")
+            self.atualizar_grafico()
         else:
             self.ui.btn_tempo_real.setText("Tempo Real")
+            # "24 Horas" é consulta histórica: busca um snapshot fresco no
+            # SQLite via worker (assíncrono) toda vez que entra nesse modo
+            self.carregar_historico_24h()
 
+    def carregar_historico_24h(self):
+        # Solicita ao worker de persistência o snapshot das últimas 24h
+        # A resposta chega de forma assíncrona em ao_historico_24h_carregado,
+        # sem bloquear a GUI thread
+        self.solicitar_historico_24h.emit(
+            datetime.now() - timedelta(hours=24), 5000
+        )
+
+    def ao_historico_24h_carregado(self, registros):
+        # Recebe o resultado da consulta feita pelo worker de persistência
+        self.historico_24h = self.converter_registros_em_historico(registros)
         self.atualizar_grafico()
+
+    def ao_historico_filtrado_carregado(self, registros):
+        # Recebe o resultado da consulta por intervalo de datas
+        self.historico_filtrado = self.converter_registros_em_historico(registros)
+        self.atualizar_grafico()
+
+    def ao_falha_persistencia(self, mensagem):
+        # Registra falhas do worker de persistência sem travar a dashboard
+        logger.error("Falha no worker de persistência: %s", mensagem)
+
+    @staticmethod
+    def converter_registros_em_historico(registros):
+        # Converte linhas da tabela 'leituras' para o formato usado pelo gráfico
+        return [
+            {
+                "timestamp": datetime.fromisoformat(registro["data_hora"]),
+                "a0": registro["adc_tensao"],
+                "a1": registro["adc_corrente"],
+                "status_botao": 0,
+                "status_rele": registro["disjuntor_fechado"]
+            }
+            for registro in registros
+        ]
     
     def atualizar_dashboard(self):
 
@@ -986,17 +1077,30 @@ class DashController(QMainWindow):
 
         self.filtro_data_ativo = True
 
-        # Atualiza a tabela usando o filtro
+        # Solicita ao worker de persistência as leituras do período no SQLite
+        # A resposta chega de forma assíncrona em ao_historico_filtrado_carregado
+        self.solicitar_consulta_periodo.emit(data_inicio, data_fim)
+
+        # Atualiza a tabela usando o filtro (não depende da consulta de leituras)
         self.atualizar_tabela()
 
     def limpar_filtro_data(self):
         # Remove o filtro
         self.filtro_data_ativo = False
+        self.historico_filtrado = []
 
         # Volta as datas para o dia atual
         hoje = QDate.currentDate()
         self.ui.data_inicio.setDate(hoje)
         self.ui.data_fim.setDate(hoje)
+
+        # Tempo real lê direto do buffer ao vivo, que nunca parou de ser
+        # atualizado durante o filtro; 24 Horas é consulta e pode ter ficado
+        # desatualizada, então busca um snapshot novo
+        if self.modo_tempo_real:
+            self.atualizar_grafico()
+        else:
+            self.carregar_historico_24h()
 
         # Mostra novamente todos os registros
         self.atualizar_tabela()
@@ -1160,6 +1264,12 @@ class DashController(QMainWindow):
             )
         ):
             self.comunicacao_controller.ao_desconectar()
+
+        # Encerramento cooperativo da Database Worker Thread
+        self.thread_persistencia.quit()
+        self.thread_persistencia.wait()
+        self.worker_persistencia.deleteLater()
+
         # Permite que a janela seja fechada após o encerramento da comunicação
         event.accept()
 
@@ -1437,11 +1547,28 @@ class DashController(QMainWindow):
         # Adiciona a leitura ao histórico
         self.historico_adc.append(leitura)
 
-        # Mantém o histórico em memória limitado
-        # Evita crescimento ilimitado durante a execução
-        if len(self.historico_adc) > 1000:
+        # Mantém o histórico em memória limitado, mas cobrindo os 60s exibidos
+        # no modo "Tempo Real" mesmo na taxa máxima do protocolo (200 Hz)
+        if len(self.historico_adc) > 15000:
             self.historico_adc.pop(0)
 
-        # Atualiza o gráfico e os indicadores
-        self.atualizar_grafico()
+        # Solicita ao worker de persistência a gravação da medição no SQLite
+        # Roda na Database Worker Thread: não bloqueia a GUI mesmo com
+        # telemetria chegando em alta frequência (ex.: 200 Hz)
+        if self.medicao_atual is not None:
+            self.solicitar_gravacao_leitura.emit(self.medicao_atual)
+
+        # Atualiza o gráfico em taxa limitada (redesenho é custo de GUI,
+        # independente da persistência já estar fora dessa thread)
+        deve_redesenhar = (
+            self.ultimo_redesenho_grafico is None
+            or (instante - self.ultimo_redesenho_grafico)
+            >= self.intervalo_redesenho_grafico
+        )
+
+        if deve_redesenhar:
+            self.atualizar_grafico()
+            self.ultimo_redesenho_grafico = instante
+
+        # Indicadores numéricos continuam em tempo real, a cada leitura
         self.atualizar_dashboard()
