@@ -1,7 +1,7 @@
 # Controle da supervisão do sistema
 from datetime import datetime, timedelta # data/hora e intervalo de tempo
 import pyqtgraph as pg # desenhar gráficos
-from PySide6.QtCore import QTimer, QDate, QThread, Signal # Executa função a cada certo período, base para datas e worker thread
+from PySide6.QtCore import QTimer, QDate, QDateTime, QTime, QThread, Signal, Qt # Executa função a cada certo período, base para datas e worker thread
 from PySide6.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox # Base da janela principal e texto dentro das células da tabela
 from ui.Ui_dashboard import Ui_MainWindow # Interface criada pelo Qt Designer
 from models.medicao import Medicao # Medições
@@ -34,10 +34,10 @@ class DashController(QMainWindow):
         self.ui.setupUi(self) # Coloca a interface dentro da janela
         # Passa a ter acesso aos componentes
 
-        # Inicializa o filtro com a data atual
+        # Inicializa o filtro com o dia atual (00:00 até 23:59:59)
         hoje = QDate.currentDate()
-        self.ui.data_inicio.setDate(hoje)
-        self.ui.data_fim.setDate(hoje)
+        self.ui.data_inicio.setDateTime(QDateTime(hoje, QTime(0, 0, 0)))
+        self.ui.data_fim.setDateTime(QDateTime(hoje, QTime(23, 59, 59)))
 
         # Indica se o filtro de data está ativo
         self.filtro_data_ativo = False
@@ -439,7 +439,7 @@ class DashController(QMainWindow):
 
         self.grafico.setLabel("left", "Valor ADC")
         self.grafico.setLabel("bottom", "Horário")
-        self.grafico.setYRange(0, 1023)
+        self.grafico.setYRange(0, 1023, padding=0)
 
         self.grafico.showGrid(x=True, y=True, alpha=0.15)
         self.grafico.setMinimumHeight(190)
@@ -448,8 +448,11 @@ class DashController(QMainWindow):
         eixo_tempo = pg.DateAxisItem(orientation="bottom")
         self.grafico.setAxisItems({"bottom": eixo_tempo})
 
-        # Legenda das curvas
-        self.grafico.addLegend()
+        # Legenda das curvas - com fundo opaco, senão as linhas do próprio
+        # gráfico passam por baixo e acabam sobrepondo o texto "A0"/"A1"
+        legenda = self.grafico.addLegend()
+        legenda.setBrush(pg.mkBrush(255, 255, 255, 230))
+        legenda.setPen(pg.mkPen(color="#DCD0E8"))
 
         # Curva do sinal A0
         self.curva_a0 = self.grafico.plot(
@@ -482,10 +485,10 @@ class DashController(QMainWindow):
         elif self.modo_tempo_real:
             # Buffer ao vivo, alimentado continuamente pela telemetria
             # (a 200Hz do protocolo oficial, cobre bem mais que 60s em memória)
-            if not self.historico_adc:
-                return
-
-            # Exibe somente as leituras dos últimos 60 segundos
+            # Exibe somente as leituras dos últimos 60 segundos - se ainda não
+            # chegou nenhuma leitura, o resultado é uma lista vazia (e não um
+            # 'return' antecipado, que deixaria o gráfico do modo anterior
+            # parado na tela, parecendo que a troca de modo não fez nada)
             limite = agora - timedelta(seconds=60)
 
             historico = [
@@ -494,10 +497,24 @@ class DashController(QMainWindow):
                 if item["timestamp"] >= limite
             ]
         else:
-            # Modo "24 Horas": é uma consulta histórica ao SQLite (snapshot),
-            # não uma janela sobre o buffer ao vivo — a 200Hz, 24h de dados
-            # não cabem em memória, por isso é recarregado ao entrar no modo
+            # Modo "Histórico": é uma consulta ao SQLite (snapshot), não uma
+            # janela sobre o buffer ao vivo — a 200Hz, 24h de dados não cabem
+            # em memória, por isso é recarregado ao entrar no modo
             historico = self.historico_24h
+
+        self.atualizar_subtitulo_grafico(historico)
+
+        if self.modo_tempo_real:
+            # Tempo Real mantém a escala fixa (0-1023): referência estável
+            # de onde o valor está dentro da faixa do ADC
+            self.grafico.enableAutoRange(axis="y", enable=False)
+            self.grafico.setYRange(0, 1023, padding=0)
+        else:
+            # Histórico: o eixo Y se ajusta automaticamente conforme o
+            # usuário dá zoom/arrasta no gráfico, pra enxergar de perto
+            # variações pequenas numa janela de tempo mais curta
+            self.grafico.enableAutoRange(axis="y", enable=True)
+            self.grafico.setAutoVisible(y=True)
 
         if not historico:
             self.curva_a0.setData([], [])
@@ -539,13 +556,43 @@ class DashController(QMainWindow):
         self.modo_tempo_real = not self.modo_tempo_real
 
         if self.modo_tempo_real:
-            self.ui.btn_tempo_real.setText("24 Horas")
+            # Tempo Real e filtro de data são mutuamente exclusivos - entrar
+            # em Tempo Real sempre restabelece o filtro ao padrão, senão o
+            # botão fica dizendo "Tempo Real" mas o gráfico continua
+            # mostrando o histórico filtrado (contra-intuitivo)
+            self.resetar_filtro_data()
+            self.ui.btn_tempo_real.setText("Histórico")
             self.atualizar_grafico()
+            self.atualizar_tabela()
         else:
             self.ui.btn_tempo_real.setText("Tempo Real")
-            # "24 Horas" é consulta histórica: busca um snapshot fresco no
-            # SQLite via worker (assíncrono) toda vez que entra nesse modo
+            # "Histórico" é consulta ao SQLite: busca um snapshot fresco
+            # (assíncrono) toda vez que entra nesse modo
             self.carregar_historico_24h()
+
+    def atualizar_subtitulo_grafico(self, historico):
+        # Deixa sempre explícito qual modo está ativo e se há dados pra
+        # exibir - sem isso, Tempo Real e Histórico parecem idênticos
+        # quando não há telemetria chegando (ambos ficam com o gráfico vazio)
+        if self.filtro_data_ativo:
+            inicio = self.ui.data_inicio.dateTime().toString("dd/MM/yyyy HH:mm")
+            fim = self.ui.data_fim.dateTime().toString("dd/MM/yyyy HH:mm")
+            if historico:
+                texto = f"Histórico — {inicio} até {fim} ({len(historico)} leituras)"
+            else:
+                texto = f"Histórico — nenhuma leitura encontrada entre {inicio} e {fim}"
+        elif self.modo_tempo_real:
+            if historico:
+                texto = "Tempo Real — atualizando ao vivo"
+            else:
+                texto = "Tempo Real — aguardando dados do Arduino..."
+        else:
+            if historico:
+                texto = f"Histórico — últimas 24 horas ({len(historico)} leituras)"
+            else:
+                texto = "Histórico — nenhuma leitura registrada nas últimas 24 horas"
+
+        self.ui.lbl_grafico_subtitulo.setText(texto)
 
     def carregar_historico_24h(self):
         # Solicita ao worker de persistência o snapshot das últimas 24h
@@ -977,24 +1024,51 @@ class DashController(QMainWindow):
         # Atualiza a tabela respeitando o filtro, se estiver ativo
 
         if self.filtro_data_ativo:
-            data_inicio = self.ui.data_inicio.date().toPython()
-            data_fim = self.ui.data_fim.date().toPython()
+            data_inicio = self.ui.data_inicio.dateTime().toPython()
+            # Cobre o segundo inteiro do limite superior - o campo da UI não
+            # tem precisão de microssegundos, mas os timestamps gravados têm
+            data_fim = self.ui.data_fim.dateTime().toPython().replace(
+                microsecond=999999
+            )
 
             registros_exibidos = [
                 registro
                 for registro in self.registros
-                if data_inicio <= registro.timestamp.date() <= data_fim
+                if data_inicio <= registro.timestamp <= data_fim
             ]
         else:
             registros_exibidos = self.registros
+
+        # Preserva a posição da rolagem - a tabela é reconstruída do zero
+        # a cada atualização, e sem isso o usuário perde a posição ao
+        # navegar pra procurar um registro mais antigo
+        posicao_scroll = self.ui.tabela_registros.verticalScrollBar().value()
 
         # Atualiza a tabela de uma vez, evitando efeito visual de "piscar"
         self.ui.tabela_registros.setUpdatesEnabled(False)
         self.ui.tabela_registros.setRowCount(0)
 
-        for registro in registros_exibidos:
-            linha = 0
+        if not registros_exibidos:
+            # Deixa explícito que não há registros nesse período/filtro,
+            # em vez de só mostrar a tabela vazia (que pode parecer um bug)
+            mensagem = (
+                "Nenhum registro encontrado no período selecionado."
+                if self.filtro_data_ativo
+                else "Nenhum registro ainda."
+            )
+            self.ui.tabela_registros.insertRow(0)
+            item = QTableWidgetItem(mensagem)
+            item.setTextAlignment(Qt.AlignCenter)
+            item.setFlags(Qt.ItemIsEnabled)
+            self.ui.tabela_registros.setItem(0, 0, item)
+            self.ui.tabela_registros.setSpan(0, 0, 1, 4)
 
+            self.ui.tabela_registros.setUpdatesEnabled(True)
+            self.ui.tabela_registros.viewport().update()
+            self.ui.tabela_registros.verticalScrollBar().setValue(posicao_scroll)
+            return
+
+        for linha, registro in enumerate(registros_exibidos):
             self.ui.tabela_registros.insertRow(
                 linha
             )
@@ -1040,6 +1114,9 @@ class DashController(QMainWindow):
         self.ui.tabela_registros.setUpdatesEnabled(True)
         self.ui.tabela_registros.viewport().update()
 
+        # Restaura a posição da rolagem (limitada ao novo total de linhas)
+        self.ui.tabela_registros.verticalScrollBar().setValue(posicao_scroll)
+
     def configurar_tabela(self):
         # Configura o tamanho das colunas da tabela
 
@@ -1055,42 +1132,59 @@ class DashController(QMainWindow):
         self.ui.tabela_registros.horizontalHeader().setStretchLastSection(True)
 
     def filtrar_historico_por_data(self):
-        # Filtra a tabela por intervalo de datas selecionado
-        
-        data_inicio = self.ui.data_inicio.date().toPython()
-        data_fim = self.ui.data_fim.date().toPython()
-        
+        # Filtra a tabela por intervalo de data/horário selecionado
+
+        data_inicio = self.ui.data_inicio.dateTime().toPython()
+        # Cobre o segundo inteiro do limite superior - o campo da UI não tem
+        # precisão de microssegundos, mas os timestamps gravados têm
+        data_fim = self.ui.data_fim.dateTime().toPython().replace(
+            microsecond=999999
+        )
+
         # Impede intervalo inválido
         if data_inicio > data_fim:
             QMessageBox.warning(
                 self,
                 "Filtro inválido",
-                "A data inicial não pode ser maior que a data final."
+                "O início não pode ser depois do fim do intervalo."
             )
             return
 
         self.filtro_data_ativo = True
 
+        # Filtrar é sempre uma ação de histórico - sai do Tempo Real
+        # automaticamente, senão o filtro ficaria sem efeito visual nenhum
+        if self.modo_tempo_real:
+            self.modo_tempo_real = False
+            self.ui.btn_tempo_real.setText("Tempo Real")
+
         # Solicita ao worker de persistência as leituras do período no SQLite
         # A resposta chega de forma assíncrona em ao_historico_filtrado_carregado
         self.solicitar_consulta_periodo.emit(data_inicio, data_fim)
 
+        # Limpa a curva antiga (ex.: do Tempo Real) imediatamente, em vez de
+        # deixá-la na tela até a consulta assíncrona retornar
+        self.historico_filtrado = []
+        self.atualizar_grafico()
+
         # Atualiza a tabela usando o filtro (não depende da consulta de leituras)
         self.atualizar_tabela()
 
-    def limpar_filtro_data(self):
-        # Remove o filtro
+    def resetar_filtro_data(self):
+        # Remove o filtro e restabelece o padrão (dia atual, 00:00 às 23:59:59)
         self.filtro_data_ativo = False
         self.historico_filtrado = []
 
-        # Volta as datas para o dia atual
         hoje = QDate.currentDate()
-        self.ui.data_inicio.setDate(hoje)
-        self.ui.data_fim.setDate(hoje)
+        self.ui.data_inicio.setDateTime(QDateTime(hoje, QTime(0, 0, 0)))
+        self.ui.data_fim.setDateTime(QDateTime(hoje, QTime(23, 59, 59)))
+
+    def limpar_filtro_data(self):
+        self.resetar_filtro_data()
 
         # Tempo real lê direto do buffer ao vivo, que nunca parou de ser
-        # atualizado durante o filtro; 24 Horas é consulta e pode ter ficado
-        # desatualizada, então busca um snapshot novo
+        # atualizado durante o filtro; Histórico é consulta e pode ter
+        # ficado desatualizado, então busca um snapshot novo
         if self.modo_tempo_real:
             self.atualizar_grafico()
         else:
@@ -1541,16 +1635,21 @@ class DashController(QMainWindow):
             self.solicitar_gravacao_leitura.emit(self.medicao_atual)
 
         # Atualiza o gráfico em taxa limitada (redesenho é custo de GUI,
-        # independente da persistência já estar fora dessa thread)
-        deve_redesenhar = (
-            self.ultimo_redesenho_grafico is None
-            or (instante - self.ultimo_redesenho_grafico)
-            >= self.intervalo_redesenho_grafico
-        )
+        # independente da persistência já estar fora dessa thread). Só faz
+        # sentido redesenhar aqui no modo Tempo Real: no Histórico, a curva
+        # exibida é um snapshot estático do SQLite que não muda a cada
+        # leitura nova, e redesenhar mesmo assim resetava o zoom/arrasto que
+        # o usuário tivesse feito manualmente no gráfico a cada ~100ms
+        if self.modo_tempo_real:
+            deve_redesenhar = (
+                self.ultimo_redesenho_grafico is None
+                or (instante - self.ultimo_redesenho_grafico)
+                >= self.intervalo_redesenho_grafico
+            )
 
-        if deve_redesenhar:
-            self.atualizar_grafico()
-            self.ultimo_redesenho_grafico = instante
+            if deve_redesenhar:
+                self.atualizar_grafico()
+                self.ultimo_redesenho_grafico = instante
 
         # Indicadores numéricos continuam em tempo real, a cada leitura
         self.atualizar_dashboard()

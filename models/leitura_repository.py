@@ -50,42 +50,67 @@ class LeituraRepository:
             conn.close()
 
     @classmethod
+    def _amostrar(cls, conn, clausula_where, parametros, limite):
+        # Amostra até 'limite' leituras distribuídas por TODO o intervalo
+        # filtrado (não só as mais recentes) - um ORDER BY DESC LIMIT puro
+        # pegaria só o fim do período (a 200Hz, 5000 linhas = 25 segundos),
+        # descartando tudo antes disso num período longo (ex.: 24h ou semanas)
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM leituras WHERE {clausula_where}",
+            parametros
+        ).fetchone()[0]
+
+        if total == 0:
+            return []
+
+        # Divide as leituras em até 'limite' "baldes" de tamanho igual ao
+        # longo do período e mantém a primeira leitura de cada balde que
+        # muda (balde = posição * limite // total). Evita o "efeito serrote"
+        # de um passo fixo (ex.: ceil(total/limite)), que faz a quantidade
+        # de pontos cair bruscamente sempre que o total cruza um múltiplo do
+        # limite - aqui a contagem cresce suavemente conforme o período aumenta
+        return conn.execute(
+            f"""
+            SELECT {cls._COLUNAS}
+            FROM (
+                SELECT {cls._COLUNAS},
+                       (ROW_NUMBER() OVER (ORDER BY data_hora, id) - 1) AS rn
+                FROM leituras
+                WHERE {clausula_where}
+            )
+            WHERE rn = 0
+               OR (rn * ?) / ? != ((rn - 1) * ?) / ?
+            ORDER BY data_hora
+            """,
+            parametros + (limite, total, limite, total)
+        ).fetchall()
+
+    @classmethod
     def listar_por_periodo(cls, data_inicio, data_fim, limite=5000):
-        # Consulta as leituras dentro do intervalo de datas informado
-        # Limitado para não travar a interface com períodos muito longos/densos
+        # Consulta as leituras dentro do intervalo de data/horário informado
+        # (comparação direta na string ISO, sem truncar pra granularidade de dia)
         conn = Database.get_connection()
         try:
-            registros = conn.execute(
-                f"""
-                SELECT {cls._COLUNAS}
-                FROM leituras
-                WHERE date(data_hora) BETWEEN date(?) AND date(?)
-                ORDER BY data_hora DESC, id DESC
-                LIMIT ?
-                """,
-                (data_inicio.isoformat(), data_fim.isoformat(), limite)
-            ).fetchall()
-            return list(reversed(registros))
+            return cls._amostrar(
+                conn,
+                "data_hora BETWEEN ? AND ?",
+                (data_inicio.isoformat(), data_fim.isoformat()),
+                limite
+            )
         finally:
             conn.close()
 
     @classmethod
     def listar_desde(cls, instante, limite=5000):
         # Consulta as leituras a partir de um instante (ex.: últimas 24h)
-        # Limitado para não travar a interface quando há muitas leituras na janela
         conn = Database.get_connection()
         try:
-            registros = conn.execute(
-                f"""
-                SELECT {cls._COLUNAS}
-                FROM leituras
-                WHERE data_hora >= ?
-                ORDER BY data_hora DESC, id DESC
-                LIMIT ?
-                """,
-                (instante.isoformat(), limite)
-            ).fetchall()
-            return list(reversed(registros))
+            return cls._amostrar(
+                conn,
+                "data_hora >= ?",
+                (instante.isoformat(),),
+                limite
+            )
         finally:
             conn.close()
 

@@ -15,7 +15,7 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDateEdit, QDoubleSpinBox,
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDateTimeEdit, QDoubleSpinBox,
     QFrame, QHBoxLayout, QHeaderView, QLabel,
     QMainWindow, QPushButton, QSizePolicy, QSpacerItem,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
@@ -347,10 +347,54 @@ class Ui_MainWindow(object):
 "    background: #8B5CF6;\n"
 "}\n"
 "\n"
-"QDateEdit {\n"
+"QDateTimeEdit {\n"
 "    background-color: white;\n"
-"    co"
-                        "lor: #1A1030;\n"
+"  "
+                        "  color: #1A1030;\n"
+"}\n"
+"\n"
+"QCalendarWidget QWidget {\n"
+"    background-color: #FFFFFF;\n"
+"    color: #1A1030;\n"
+"}\n"
+"\n"
+"QCalendarWidget QWidget#qt_calendar_navigationbar {\n"
+"    background-color: #3D1A6B;\n"
+"}\n"
+"\n"
+"QCalendarWidget QToolButton {\n"
+"    background-color: transparent;\n"
+"    color: #FFFFFF;\n"
+"    font-weight: 700;\n"
+"}\n"
+"\n"
+"QCalendarWidget QToolButton:hover {\n"
+"    background-color: rgba(255, 255, 255, 0.15);\n"
+"    border-radius: 4px;\n"
+"}\n"
+"\n"
+"QCalendarWidget QMenu {\n"
+"    background-color: #FFFFFF;\n"
+"    color: #1A1030;\n"
+"}\n"
+"\n"
+"QCalendarWidget QSpinBox {\n"
+"    background-color: #FFFFFF;\n"
+"    color: #1A1030;\n"
+"    selection-background-color: #8B5CF6;\n"
+"    selection-color: #FFFFFF;\n"
+"}\n"
+"\n"
+"QCalendarWidget QAbstractItemView:enabled {\n"
+"    background-color: #FFFFFF;\n"
+"    color: #1A1030;\n"
+"    selection-background-color: #8B5CF6;\n"
+"    selection-color: #FFFFFF;\n"
+"}\n"
+"\n"
+"QCalendarWidget QAbstractItemView:disabled {\n"
+""
+                        "    color: #C7BBD4;\n"
 "}\n"
 "   ")
         self.centralwidget = QWidget(MainWindow)
@@ -689,10 +733,10 @@ class Ui_MainWindow(object):
 
         self.layout_filtro.addWidget(self.lbl_filtro)
 
-        self.data_inicio = QDateEdit(self.filtroPanel)
+        self.data_inicio = QDateTimeEdit(self.filtroPanel)
         self.data_inicio.setObjectName(u"data_inicio")
-        self.data_inicio.setMinimumSize(QSize(85, 28))
-        self.data_inicio.setDate(QDate(2000, 1, 1))
+        self.data_inicio.setMinimumSize(QSize(135, 28))
+        self.data_inicio.setDateTime(QDateTime(QDate(2000, 1, 1), QTime(0, 0, 0)))
         self.data_inicio.setCalendarPopup(True)
 
         self.layout_filtro.addWidget(self.data_inicio)
@@ -702,10 +746,10 @@ class Ui_MainWindow(object):
 
         self.layout_filtro.addWidget(self.lbl_ate)
 
-        self.data_fim = QDateEdit(self.filtroPanel)
+        self.data_fim = QDateTimeEdit(self.filtroPanel)
         self.data_fim.setObjectName(u"data_fim")
-        self.data_fim.setMinimumSize(QSize(85, 28))
-        self.data_fim.setDate(QDate(2000, 1, 1))
+        self.data_fim.setMinimumSize(QSize(135, 28))
+        self.data_fim.setDateTime(QDateTime(QDate(2000, 1, 1), QTime(23, 59, 59)))
         self.data_fim.setCalendarPopup(True)
 
         self.layout_filtro.addWidget(self.data_fim)
@@ -792,7 +836,7 @@ class Ui_MainWindow(object):
         self.grupo_grafico.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panel", None))
         self.lbl_grafico_titulo.setText(QCoreApplication.translate("MainWindow", u"Curva de demanda de pot\u00eancia", None))
         self.lbl_grafico_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelTitle", None))
-        self.lbl_grafico_subtitulo.setText(QCoreApplication.translate("MainWindow", u"hist\u00f3rico pr\u00e9-carregado ou em tempo real", None))
+        self.lbl_grafico_subtitulo.setText(QCoreApplication.translate("MainWindow", u"Hist\u00f3rico pr\u00e9-carregado ou em tempo real", None))
         self.lbl_grafico_subtitulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelSubtitle", None))
         self.btn_tempo_real.setText(QCoreApplication.translate("MainWindow", u"Tempo Real", None))
         self.statusCard.setProperty(u"estado", QCoreApplication.translate("MainWindow", u"fechado", None))
@@ -812,9 +856,9 @@ class Ui_MainWindow(object):
         self.lbl_historico_titulo.setText(QCoreApplication.translate("MainWindow", u"Hist\u00f3rico de eventos e auditoria", None))
         self.lbl_historico_titulo.setProperty(u"class", QCoreApplication.translate("MainWindow", u"panelTitle", None))
         self.lbl_filtro.setText(QCoreApplication.translate("MainWindow", u"Data:", None))
-        self.data_inicio.setDisplayFormat(QCoreApplication.translate("MainWindow", u"dd/MM/yyyy", None))
+        self.data_inicio.setDisplayFormat(QCoreApplication.translate("MainWindow", u"dd/MM/yyyy HH:mm", None))
         self.lbl_ate.setText(QCoreApplication.translate("MainWindow", u"at\u00e9", None))
-        self.data_fim.setDisplayFormat(QCoreApplication.translate("MainWindow", u"dd/MM/yyyy", None))
+        self.data_fim.setDisplayFormat(QCoreApplication.translate("MainWindow", u"dd/MM/yyyy HH:mm", None))
         self.btn_filtrar.setText(QCoreApplication.translate("MainWindow", u"Filtrar", None))
         self.btn_limpar_filtro.setText(QCoreApplication.translate("MainWindow", u"Limpar", None))
         ___qtablewidgetitem = self.tabela_registros.horizontalHeaderItem(0)

@@ -335,9 +335,52 @@ QScrollBar::handle:vertical:hover {
     background: #8B5CF6;
 }
 
-QDateEdit {
+QDateTimeEdit {
     background-color: white;
     color: #1A1030;
+}
+
+QCalendarWidget QWidget {
+    background-color: #FFFFFF;
+    color: #1A1030;
+}
+
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background-color: #3D1A6B;
+}
+
+QCalendarWidget QToolButton {
+    background-color: transparent;
+    color: #FFFFFF;
+    font-weight: 700;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+}
+
+QCalendarWidget QMenu {
+    background-color: #FFFFFF;
+    color: #1A1030;
+}
+
+QCalendarWidget QSpinBox {
+    background-color: #FFFFFF;
+    color: #1A1030;
+    selection-background-color: #8B5CF6;
+    selection-color: #FFFFFF;
+}
+
+QCalendarWidget QAbstractItemView:enabled {
+    background-color: #FFFFFF;
+    color: #1A1030;
+    selection-background-color: #8B5CF6;
+    selection-color: #FFFFFF;
+}
+
+QCalendarWidget QAbstractItemView:disabled {
+    color: #C7BBD4;
 }
    </string>
   </property>
@@ -1054,21 +1097,24 @@ QDateEdit {
              </widget>
             </item>
             <item>
-             <widget class="QDateEdit" name="data_inicio">
+             <widget class="QDateTimeEdit" name="data_inicio">
               <property name="minimumSize">
                <size>
-                <width>85</width>
+                <width>135</width>
                 <height>28</height>
                </size>
               </property>
-              <property name="date">
-               <date>
+              <property name="dateTime">
+               <datetime>
+                <hour>0</hour>
+                <minute>0</minute>
+                <second>0</second>
                 <year>2000</year>
                 <month>1</month>
                 <day>1</day>
-               </date>
+               </datetime>
               </property>
-             <property name="calendarPopup"><bool>true</bool></property><property name="displayFormat"><string>dd/MM/yyyy</string></property></widget>
+             <property name="calendarPopup"><bool>true</bool></property><property name="displayFormat"><string>dd/MM/yyyy HH:mm</string></property></widget>
             </item>
             <item>
              <widget class="QLabel" name="lbl_ate">
@@ -1078,21 +1124,24 @@ QDateEdit {
              </widget>
             </item>
             <item>
-             <widget class="QDateEdit" name="data_fim">
+             <widget class="QDateTimeEdit" name="data_fim">
               <property name="minimumSize">
                <size>
-                <width>85</width>
+                <width>135</width>
                 <height>28</height>
                </size>
               </property>
-              <property name="date">
-               <date>
+              <property name="dateTime">
+               <datetime>
+                <hour>23</hour>
+                <minute>59</minute>
+                <second>59</second>
                 <year>2000</year>
                 <month>1</month>
                 <day>1</day>
-               </date>
+               </datetime>
               </property>
-             <property name="calendarPopup"><bool>true</bool></property><property name="displayFormat"><string>dd/MM/yyyy</string></property></widget>
+             <property name="calendarPopup"><bool>true</bool></property><property name="displayFormat"><string>dd/MM/yyyy HH:mm</string></property></widget>
             </item>
             <item>
              <widget class="QPushButton" name="btn_filtrar">
