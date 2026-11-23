@@ -295,6 +295,8 @@ class Ui_Form(object):
         self.combo_baud = QComboBox(self.grupo_parametros)
         self.combo_baud.addItem("")
         self.combo_baud.addItem("")
+        self.combo_baud.addItem("")
+        self.combo_baud.addItem("")
         self.combo_baud.setObjectName(u"combo_baud")
 
         self.layout_baud.addWidget(self.combo_baud)
@@ -379,7 +381,9 @@ class Ui_Form(object):
         self.lbl_baud_titulo.setText(QCoreApplication.translate("Form", u"BAUD RATE", None))
         self.lbl_baud_titulo.setProperty(u"class", QCoreApplication.translate("Form", u"fieldLabel", None))
         self.combo_baud.setItemText(0, QCoreApplication.translate("Form", u"9600", None))
-        self.combo_baud.setItemText(1, QCoreApplication.translate("Form", u"115200", None))
+        self.combo_baud.setItemText(1, QCoreApplication.translate("Form", u"19200", None))
+        self.combo_baud.setItemText(2, QCoreApplication.translate("Form", u"38400", None))
+        self.combo_baud.setItemText(3, QCoreApplication.translate("Form", u"115200", None))
 
         self.lbl_timeout_titulo.setText(QCoreApplication.translate("Form", u"TIMEOUT (s)", None))
         self.lbl_timeout_titulo.setProperty(u"class", QCoreApplication.translate("Form", u"fieldLabel", None))

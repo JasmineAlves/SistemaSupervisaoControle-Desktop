@@ -128,6 +128,12 @@ class ComunicacaoController(QDialog):
             self.leitura_serial.requestInterruption()
             self.leitura_serial.wait()
 
+        # Libera a thread parada (uma nova é criada a cada reconexão em
+        # iniciar_leitura_serial) - encerramento cooperativo completo
+        if self.leitura_serial:
+            self.leitura_serial.deleteLater()
+            self.leitura_serial = None
+
         # Faz desconexão da comunicação serial
         self.model.desconectar()
         logger.info("Comunicação desconectada.")
@@ -305,6 +311,20 @@ class ComunicacaoController(QDialog):
     def ao_ocorrer_erro_leitura(self, erro: str):
         # Registra erro q pode acontecer na leitura
         logger.error("Erro na leitura serial: %s", erro)
+
+        # Alerta o operador (ex.: desconexão repentina do cabo/porta) e
+        # limpa o estado da conexão, já que a thread de leitura parou
+        QMessageBox.warning(
+            self,
+            "Erro na comunicação serial",
+            (
+                "A leitura da porta serial foi interrompida por um erro "
+                "inesperado (ex.: cabo ou porta desconectados).\n\n"
+                f"Detalhes: {erro}"
+            )
+        )
+
+        self.ao_desconectar()
 
     # closeEvent = método definido pelo Qt, NÃO pode mudar nomeação
     def closeEvent(self, event):
