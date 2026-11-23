@@ -9,7 +9,6 @@ from models.registro import Registro # Evento registrado no sistema
 from controllers.comunicacao_controller import ComunicacaoController
 from controllers.configuracao_controller import ConfiguracaoController
 from models.configuracao import Configuracao
-from models.registro_repository import RegistroRepository
 from models.leitura_worker import PersistenciaWorker
 import logging
 import math
@@ -23,6 +22,9 @@ class DashController(QMainWindow):
     solicitar_gravacao_leitura = Signal(object)
     solicitar_historico_24h = Signal(object, object)
     solicitar_consulta_periodo = Signal(object, object)
+    solicitar_registro_evento = Signal(object)
+    solicitar_registro_corte = Signal(bool, object)
+    solicitar_carregar_eventos = Signal()
 
     def __init__(self):
         super().__init__()
@@ -106,6 +108,10 @@ class DashController(QMainWindow):
 
         self.modo_tempo_real = False
 
+        # Evita empilhar um QMessageBox por falha quando o worker de
+        # persistência falha repetidamente (ex.: a cada leitura a 200Hz)
+        self.falha_persistencia_alertada = False
+
         # Configura o gráfico, chama a função que cria o gráfico
         self.configurar_grafico()
 
@@ -124,6 +130,15 @@ class DashController(QMainWindow):
         self.solicitar_consulta_periodo.connect(
             self.worker_persistencia.consultar_periodo
         )
+        self.solicitar_registro_evento.connect(
+            self.worker_persistencia.gravar_registro_evento
+        )
+        self.solicitar_registro_corte.connect(
+            self.worker_persistencia.gravar_registro_corte
+        )
+        self.solicitar_carregar_eventos.connect(
+            self.worker_persistencia.carregar_eventos
+        )
 
         # Respostas do worker para a dashboard (entregues de volta na GUI thread)
         self.worker_persistencia.historico_24h_carregado.connect(
@@ -132,7 +147,11 @@ class DashController(QMainWindow):
         self.worker_persistencia.historico_filtrado_carregado.connect(
             self.ao_historico_filtrado_carregado
         )
+        self.worker_persistencia.eventos_carregados.connect(
+            self.ao_eventos_carregados
+        )
         self.worker_persistencia.falha.connect(self.ao_falha_persistencia)
+
 
         self.thread_persistencia.start()
 
@@ -144,11 +163,9 @@ class DashController(QMainWindow):
         # Configura a tabela de registros, define tamanho das colunas
         self.configurar_tabela()
 
-        # Recupera eventos salvos no bd antes
+        # Recupera eventos salvos no bd antes (de forma assíncrona, via
+        # Database Worker Thread - a resposta chega em ao_eventos_carregados)
         self.carregar_registros()
-
-        # Att interface p/ exibir eventos recuperados
-        self.atualizar_tabela()
 
         # Registra evento p/ indicar que sistema iniciou supervisao
         self.adicionar_registro(
@@ -253,56 +270,32 @@ class DashController(QMainWindow):
                 else self.formatar_medicao()
             )
         )
-        try:
-            # Att disjuntor e salva o evento
-            id_registro = RegistroRepository.registrar_corte(
-                aberto=aberto,
-                registro=registro
-            )
-        except Exception as erro:
-            # Registra log no smartgrid.log
-            logger.exception(
-                "Falha na operação de corte emergencial. "
-                "A transação foi revertida quando aplicável: %s",
-                erro
-            )
 
-            # Informa a falha sem modificar o estado
-            QMessageBox.critical(
-                self,
-                "Falha no registro da operação",
-                (
-                    "O Arduino confirmou a alteração física do relé, "
-                    "mas não foi possível registrar o evento no banco de dados.\n\n"
-                    "Verifique a persistência e o histórico do sistema.\n\n"
-                    f"Detalhes: {erro}"
-                )
-            )
-            return False
-
-        # Guarda o id gerado pelo bd no objeto do evento
-        registro.id = id_registro
+        # Att disjuntor e salva o evento em segundo plano (Database Worker
+        # Thread), de forma atômica (DispositivoRepository.registrar_corte
+        # usa um único 'with conn:'). Falhas chegam de forma assíncrona em
+        # ao_falha_persistencia, sem travar a confirmação física do relé.
+        self.solicitar_registro_corte.emit(aberto, registro)
 
         # Registra log no smartgrid.log
         if aberto:
             logger.warning(
-                "Corte de emergência registrado com sucesso. "
+                "Corte de emergência solicitado. "
                 "Disjuntor: ABERTO. Tipo: %s. Descrição: %s",
                 tipo,
                 descricao
             )
         else:
             logger.info(
-                "Retomada do sistema registrada com sucesso. "
+                "Retomada do sistema solicitada. "
                 "Disjuntor: FECHADO. Tipo: %s. Descrição: %s",
                 tipo,
                 descricao
             )
 
-        # Att lista em memória
+        # Att lista em memória de forma otimista (não depende da persistência)
         self.registros.insert(0, registro)
         self.atualizar_tabela()
-        return True
 
     def solicitar_acao_rele(self, acao, comando):
         # Evita enviar comandos enquanto outro aguarda confirmação
@@ -575,6 +568,18 @@ class DashController(QMainWindow):
     def ao_falha_persistencia(self, mensagem):
         # Registra falhas do worker de persistência sem travar a dashboard
         logger.error("Falha no worker de persistência: %s", mensagem)
+
+        # Alerta o operador uma única vez por sessão, para não empilhar
+        # diálogos caso a falha se repita a cada leitura
+        if not self.falha_persistencia_alertada:
+            self.falha_persistencia_alertada = True
+            QMessageBox.warning(
+                self,
+                "Falha de persistência",
+                "Houve uma falha ao gravar ou consultar leituras no banco de "
+                "dados. A aplicação continua operando normalmente, mas "
+                "verifique o arquivo de log."
+            )
 
     @staticmethod
     def converter_registros_em_historico(registros):
@@ -931,39 +936,24 @@ class DashController(QMainWindow):
             descricao=descricao,
             valor=valor
         )
-        
-        try:
-            id_registro = RegistroRepository.inserir(registro)
-        except Exception as erro:
-            logger.exception(
-                "Falha ao persistir evento no SQLite. "
-                "Tipo=%s, descrição=%s, motivo=%s",
-                tipo,
-                descricao,
-                erro
-            )
 
-            QMessageBox.critical(
-                self,
-                "Erro ao salvar evento",
-                (
-                    "Não foi possível salvar o evento no banco de dados.\n\n"
-                    f"Detalhes: {erro}"
-                )
-            )
-            return
-        
-        # Adiciona o id retornado pelo banco ao objeto do evento
-        registro.id = id_registro
-        # Insere evento no início da lista em memória, com eventos +recentes antes
+        # Insere evento no início da lista em memória, com eventos +recentes
+        # antes - de forma otimista, sem depender da persistência
         self.registros.insert(0, registro)
         # Att a tabela de histórico
         self.atualizar_tabela()
 
+        # Persiste em segundo plano (Database Worker Thread); falhas chegam
+        # de forma assíncrona em ao_falha_persistencia
+        self.solicitar_registro_evento.emit(registro)
+
     def carregar_registros(self):
-        registros_banco = RegistroRepository.listar_todos()
-        # Limpa a lista em memória antes de carregar os registros
-        self.registros = []
+        # Solicita o histórico de eventos ao worker de persistência; a
+        # resposta chega de forma assíncrona em ao_eventos_carregados
+        self.solicitar_carregar_eventos.emit()
+
+    def ao_eventos_carregados(self, registros_banco):
+        registros_convertidos = []
 
         for item in registros_banco:
             # Cria um objeto Registro com os dados recuperados
@@ -976,8 +966,12 @@ class DashController(QMainWindow):
             registro.timestamp = datetime.fromisoformat(
                 item["data_hora"]
             )
-            # Adiciona o evento à lista em memória
-            self.registros.append(registro)
+            registros_convertidos.append(registro)
+
+        # Mescla com eventos já adicionados em memória enquanto a consulta
+        # ainda não havia retornado (ex.: evento de inicialização)
+        self.registros = self.registros + registros_convertidos
+        self.atualizar_tabela()
 
     def atualizar_tabela(self):
         # Atualiza a tabela respeitando o filtro, se estiver ativo
@@ -1352,7 +1346,7 @@ class DashController(QMainWindow):
                 )
 
             # Registra o corte confirmado pelo hardware
-            sucesso = self.executar_corte(
+            self.executar_corte(
                 aberto=acao["aberto"],
                 tipo=acao["tipo"],
                 descricao=acao["descricao"],
@@ -1386,13 +1380,6 @@ class DashController(QMainWindow):
                         "sobrecorrente severa.\n\n"
                         f"Medição no momento do disparo: {valor_disparo}"
                     )
-                )
-
-            # Informa caso o estado físico tenha sido confirmado,
-            # mas o registro no banco tenha falhado
-            if not sucesso:
-                logger.error(
-                    "O relé confirmou a alteração, mas o registro do evento falhou."
                 )
 
             return
@@ -1477,7 +1464,7 @@ class DashController(QMainWindow):
                 )
 
             # Registra a alteração identificada pela telemetria
-            sucesso = self.executar_corte(
+            self.executar_corte(
                 aberto=aberto,
                 tipo="Alerta" if aberto else "Status",
                 descricao=(
@@ -1504,11 +1491,6 @@ class DashController(QMainWindow):
                 self.ui.btn_corte_emergencia.setText("⚠  CORTE DE EMERGÊNCIA")
 
             self.atualizar_dashboard()
-
-            if not sucesso:
-                logger.error(
-                    "Estado do relé atualizado, mas o evento não foi persistido."
-                )
 
         # Verifica a proteção automática após processar a telemetria
         if self.medicao_atual is not None:

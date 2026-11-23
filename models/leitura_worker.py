@@ -5,6 +5,7 @@ import logging
 import sqlite3
 from PySide6.QtCore import QObject, Signal, Slot
 from models.leitura_repository import LeituraRepository
+from models.registro_repository import RegistroRepository
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,8 @@ class PersistenciaWorker(QObject):
     historico_24h_carregado = Signal(list)
     # Emitido quando o histórico filtrado por data está pronto
     historico_filtrado_carregado = Signal(list)
+    # Emitido quando os eventos salvos (histórico de registros) estão prontos
+    eventos_carregados = Signal(list)
     # Emitido quando qualquer operação deste worker falha
     falha = Signal(str)
 
@@ -53,3 +56,35 @@ class PersistenciaWorker(QObject):
             return
 
         self.historico_filtrado_carregado.emit(registros)
+
+    @Slot(object)
+    def gravar_registro_evento(self, registro):
+        # Persiste um evento simples (ex.: alerta de limite), fora da GUI thread
+        try:
+            RegistroRepository.inserir(registro)
+        except sqlite3.Error:
+            logger.exception("Falha ao persistir evento no SQLite")
+            self.falha.emit("Falha ao persistir evento no SQLite")
+
+    @Slot(bool, object)
+    def gravar_registro_corte(self, aberto, registro):
+        # Persiste a atualização do disjuntor + o evento de corte/religamento,
+        # de forma atômica (DispositivoRepository.registrar_corte usa um único
+        # 'with conn:'), fora da GUI thread
+        try:
+            RegistroRepository.registrar_corte(aberto=aberto, registro=registro)
+        except Exception:
+            logger.exception("Falha ao registrar corte emergencial no SQLite")
+            self.falha.emit("Falha ao registrar o evento de corte emergencial no SQLite")
+
+    @Slot()
+    def carregar_eventos(self):
+        # Recupera o histórico de eventos (registros) salvo no SQLite
+        try:
+            registros = RegistroRepository.listar_todos()
+        except sqlite3.Error:
+            logger.exception("Falha ao carregar histórico de eventos persistido")
+            self.falha.emit("Falha ao carregar histórico de eventos persistido")
+            return
+
+        self.eventos_carregados.emit(registros)

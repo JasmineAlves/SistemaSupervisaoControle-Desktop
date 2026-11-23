@@ -16,6 +16,11 @@ class Configuracao:
         Path(__file__).resolve().parent.parent / "data" / "config.json"
     )
 
+    # Taxa de amostragem é fixa no firmware do Arduino (protocolo
+    # $DAT,... a 200Hz / 5ms) - o software não a configura, só a documenta
+    # no config.json conforme exigido pela persistência híbrida
+    TAXA_AMOSTRAGEM_HZ = 200
+
     def __init__(self, lim_v=0.0, lim_i=0.0, lim_p=0.0):
         self.lim_tensao = lim_v
         self.lim_corrente = lim_i
@@ -24,10 +29,12 @@ class Configuracao:
         self.porta_serial = ""
         self.baud_rate = "9600"
         self.timeout_serial = 1.0
+        self.taxa_amostragem_hz = self.TAXA_AMOSTRAGEM_HZ
         self._carregar()
 
         try:
-            # Consulta os limites de segurança
+            # Consulta os limites de segurança (SQLite é a fonte da verdade,
+            # por exigir integridade relacional/CHECK - sobrepõe o JSON)
             dados = LimitesRepository.obter()
             # Att os limites se tiver dados salvos
             if dados is not None:
@@ -41,6 +48,10 @@ class Configuracao:
             # Erro caso n seja possível carregar os limites
             logger.exception("Erro ao carregar os limites do SQLite")
             raise
+
+        # Mantém o config.json espelhando os limites efetivamente em uso
+        # (lidos do SQLite acima), conforme a persistência híbrida exigida
+        self._salvar()
 
     def atualizar_limites(self, tensao: float, corrente: float) -> bool:
         # Valida e atualiza os limites de operação
@@ -60,6 +71,7 @@ class Configuracao:
         self.lim_corrente = corrente
         self.lim_potencia = potencia
         self.foi_alterado_manualmente = False
+        self._salvar()
         return True
 
     def atualizar_limite_potencia_manual(self, potencia: float) -> bool:
@@ -80,6 +92,7 @@ class Configuracao:
         # Att em memória
         self.lim_potencia = potencia
         self.foi_alterado_manualmente = True
+        self._salvar()
         return True
 
     def atualizar_configuracao_comunicacao(self, porta: str, baud_rate: str, timeout: float) -> bool:
@@ -132,15 +145,19 @@ class Configuracao:
     def _salvar(self):
         try:
             os.makedirs(os.path.dirname(self._ARQUIVO), exist_ok=True)
-            # Armazena configs de comunicação
+            # Armazena configs de comunicação, limites e taxa de amostragem
             dados = {
                 "porta_serial": self.porta_serial,
                 "baud_rate": self.baud_rate,
-                "timeout_serial": self.timeout_serial
+                "timeout_serial": self.timeout_serial,
+                "taxa_amostragem_hz": self.taxa_amostragem_hz,
+                "limite_tensao_max": self.lim_tensao,
+                "limite_corrente_max": self.lim_corrente,
+                "limite_potencia_max": self.lim_potencia
             }
             with open(self._ARQUIVO, "w", encoding="utf-8") as arquivo:
                 json.dump(dados, arquivo, indent=2, ensure_ascii=False)
-            logger.info("Configurações de comunicação salvas com sucesso em data/config.json.")
+            logger.info("Configurações salvas com sucesso em data/config.json.")
         except (OSError, TypeError, ValueError):
             # Registra a falha ao salvar a configuração
             logger.exception("Erro ao salvar data/config.json")
@@ -167,6 +184,21 @@ class Configuracao:
             self.timeout_serial = float(
                 dados.get("timeout_serial", self.timeout_serial)
             )
+            # Taxa de amostragem é fixa no hardware; o JSON só a documenta
+            self.taxa_amostragem_hz = int(
+                dados.get("taxa_amostragem_hz", self.TAXA_AMOSTRAGEM_HZ)
+            )
+            # Limites: usados como valor de segurança caso o SQLite ainda
+            # não tenha dados - o __init__ sobrescreve com o SQLite depois
+            self.lim_tensao = float(
+                dados.get("limite_tensao_max", self.lim_tensao)
+            )
+            self.lim_corrente = float(
+                dados.get("limite_corrente_max", self.lim_corrente)
+            )
+            self.lim_potencia = float(
+                dados.get("limite_potencia_max", self.lim_potencia)
+            )
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             # Registra a falha e recria o arquivo com valores padrão
             logger.exception("Erro ao carregar data/config.json")
@@ -174,8 +206,12 @@ class Configuracao:
             self.porta_serial = ""
             self.baud_rate = "9600"
             self.timeout_serial = 1.0
+            self.taxa_amostragem_hz = self.TAXA_AMOSTRAGEM_HZ
+            self.lim_tensao = 0.0
+            self.lim_corrente = 0.0
+            self.lim_potencia = 0.0
 
-        # Att json só com campos de comunicação
+        # Recria o arquivo imediatamente com os valores padrão seguros
         self._salvar()
         return
 

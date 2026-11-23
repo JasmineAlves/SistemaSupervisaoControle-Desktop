@@ -1,6 +1,7 @@
 # OBS: Abre a conexão: sempre 'conn = Database.get_connection()'
 from datetime import datetime
 from database.connection import Database
+from models.dispositivo_repository import DispositivoRepository
 
 # Salva e consulta eventos
 class RegistroRepository:
@@ -67,38 +68,18 @@ class RegistroRepository:
         conn = Database.get_connection()
         try:
             with conn:
-                # Garante que o disjuntor exista
-                conn.execute(
-                    """
-                    INSERT OR IGNORE INTO dispositivos (tag, tipo, status)
-                    VALUES (?, ?, ?)
-                    """,
-                    (tag_disjuntor, "Disjuntor", "FECHADO")
+                # Garante que o disjuntor exista e localiza seu id, via CRUD
+                # parametrizado do DispositivoRepository (mesma conexão/transação)
+                dispositivo_id = DispositivoRepository.garantir_cadastro(
+                    tag_disjuntor, "Disjuntor", "FECHADO", conn=conn
                 )
-                # Localiza o id do disjuntor usado pelo histórico de eventos
-                dispositivo = conn.execute(
-                    """
-                    SELECT id
-                    FROM dispositivos
-                    WHERE tag = ?
-                    """,
-                    (tag_disjuntor,)
-                ).fetchone()
-                # Interrompe a operação caso o dispositivo n seja encontrado
-                if dispositivo is None:
-                    raise RuntimeError("Não foi possível localizar o disjuntor.")
-                # Atualiza o estado + data da última alteração
-                cursor = conn.execute(
-                    """
-                    UPDATE dispositivos
-                    SET status = ?, ultima_atualizacao = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                    (status, dispositivo["id"])
-                )
-                # Verifica se estado foi atualizado
-                if cursor.rowcount != 1:
+
+                # Atualiza o estado do disjuntor (tudo ou nada com o evento abaixo)
+                if not DispositivoRepository.atualizar_status(
+                    dispositivo_id, status, conn=conn
+                ):
                     raise RuntimeError("Não foi possível atualizar o estado do disjuntor.")
+
                 # Registra o evento
                 cursor = conn.execute(
                     """
@@ -116,7 +97,7 @@ class RegistroRepository:
                         registro.tipo,
                         registro.valor,
                         registro.descricao,
-                        dispositivo["id"]
+                        dispositivo_id
                     )
                 )
                 # Retorna id pro evento
