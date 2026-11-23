@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 class ComunicacaoController(QDialog):
     # Cria signal p/ enviar dados interpretados pra outros controllers
     dados_serial_recebidos = Signal(dict)
+    # Emitido quando a leitura serial falha inesperadamente (ex.: cabo/USB
+    # desconectado), pra outros controllers registrarem o evento
+    erro_comunicacao = Signal(str)
 
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
@@ -41,6 +44,21 @@ class ComunicacaoController(QDialog):
         self.ui.btn_conectar.clicked.connect(self.ao_conectar)
         self.ui.btn_desconectar.clicked.connect(self.ao_desconectar)
         self.ui.btn_fechar.clicked.connect(self.close)
+
+    # showEvent = método definido pelo Qt, NÃO pode mudar nomeação
+    def showEvent(self, event):
+        super().showEvent(event)
+
+        # Reconsulta as portas disponíveis sempre que a tela é aberta - sem
+        # isso, a lista só era atualizada na primeira abertura e após uma
+        # desconexão, então uma porta reconectada com a tela já fechada
+        # (ex.: usuário fechou o aviso de erro antes de reabrir) não aparecia
+        porta_atual = self.ui.combo_porta.currentText()
+        self.carregar_portas_com()
+
+        indice = self.ui.combo_porta.findText(porta_atual)
+        if indice >= 0:
+            self.ui.combo_porta.setCurrentIndex(indice)
 
     def carregar_portas_com(self):
         self.ui.combo_porta.clear()
@@ -211,10 +229,9 @@ class ComunicacaoController(QDialog):
         self.leitura_serial.start()
 
     def ao_receber_dados(self, dados: dict):
-        # Mostra dados interpretados no terminal
-        print(f"DADOS INTERPRETADOS: {dados}", flush=True)
-
         # Recebe dados validados pelo protocolo certinho
+        # OBS: não usar print() aqui - roda a cada pacote (até 200Hz) e já
+        # existe o logger.debug abaixo pra diagnóstico sem o custo do print
         logger.debug("Dados serial recebidos: %s", dados)
 
         # Emite signal que contem os dados recebidos (isso faz com q outros controllers sejam notificados)
@@ -323,6 +340,10 @@ class ComunicacaoController(QDialog):
                 f"Detalhes: {erro}"
             )
         )
+
+        # Notifica outros controllers (ex.: dashboard) pra registrar o
+        # evento no histórico, além do log
+        self.erro_comunicacao.emit(erro)
 
         self.ao_desconectar()
 

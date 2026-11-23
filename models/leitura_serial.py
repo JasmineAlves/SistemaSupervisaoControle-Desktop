@@ -37,7 +37,12 @@ class LeituraSerial(QThread):
                 # Emite a mensagem original recebida
                 self.mensagem_bruta.emit(mensagem)
 
-                print(f"SERIAL: {repr(mensagem)}", flush=True)
+                # OBS: não usar print() aqui - é I/O síncrono de terminal
+                # rodando no laço de leitura a até 200Hz, e sozinho já é
+                # suficiente pra derrubar a taxa real de pacotes processados
+                # pra uma fração disso (ex.: ~46Hz em vez de 200Hz)
+                logger.debug("Mensagem serial recebida: %s", mensagem)
+
                 # Conf se mensagem recebida é um pacote de telemetria
                 if mensagem.startswith("$DAT,"):
                     try:

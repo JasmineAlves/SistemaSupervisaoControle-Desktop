@@ -20,12 +20,62 @@ QWidget {
 }
 
 QMessageBox {
-    background-color: #3D1A6B;
-    color: #ffffff;
+    background-color: #F4F0F8;
+    color: #1A1030;
+    font-family: "Segoe UI";
+    font-size: 12px;
 }
 
 QMessageBox QLabel {
-    color: #ffffff;
+    background-color: transparent;
+    color: #6B5B7A;
+    font-family: "Segoe UI";
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px;
+}
+
+QMessageBox QLabel#qt_msgboxex_icon_label {
+    background-color: transparent;
+    padding: 8px;
+}
+
+QMessageBox QPushButton {
+    background-color: #FFFFFF;
+    color: #1A1030;
+    border: 1px solid #D4C8E0;
+    border-radius: 7px;
+    padding: 8px 18px;
+    min-width: 90px;
+    min-height: 32px;
+    font-family: "Segoe UI";
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #F0ECF5;
+    border-color: #8B5CF6;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #DDD0E8;
+}
+
+QMessageBox QPushButton:default {
+    background-color: #3D1A6B;
+    color: #FFFFFF;
+    border: 1px solid #3D1A6B;
+}
+
+QMessageBox QPushButton:default:hover {
+    background-color: #4D2A7B;
+    border-color: #4D2A7B;
+}
+
+QMessageBox QPushButton:default:pressed {
+    background-color: #31124F;
+    border-color: #31124F;
 }
 
 /* ===== Cabeçalho ===== */
