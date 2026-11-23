@@ -54,11 +54,21 @@ class DashController(QMainWindow):
         # Snapshot do filtro por intervalo de datas (consulta avulsa)
         self.historico_filtrado = []
 
-        # Throttle do redesenho do gráfico: a telemetria pode chegar a
-        # dezenas/centenas de leituras por segundo, e redesenhar a essa taxa
-        # é custo de GUI desnecessário (a persistência já roda em outra thread)
+        # Throttle do redesenho do gráfico e dos indicadores numéricos: a
+        # telemetria pode chegar a dezenas/centenas de leituras por segundo,
+        # e atualizar a essa taxa é custo de GUI desnecessário (a persistência
+        # já roda em outra thread) além de deixar os números ilegíveis de
+        # tão rápido que piscam
         self.ultimo_redesenho_grafico = None
         self.intervalo_redesenho_grafico = timedelta(seconds=0.1)
+
+        # Contagem da taxa real de pacotes recebidos (Hz), exibida na
+        # interface - zerada e recalculada a cada segundo
+        self.contador_pacotes_segundo = 0
+        self.taxa_pacotes_atual = 0
+        self.timer_taxa_pacotes = QTimer(self)
+        self.timer_taxa_pacotes.timeout.connect(self.atualizar_taxa_pacotes)
+        self.timer_taxa_pacotes.start(1000)
 
         # Guarda se o limite de potência já foi ultrapassado
         self.limite_ultrapassado = False
@@ -96,6 +106,14 @@ class DashController(QMainWindow):
         self.medicao_atual = None
         # Guarda o estado anterior do disjuntor, inicialmente desconhecido
         self.disjuntor_anterior = None
+        # Guarda o estado anterior do botão físico, pra detectar a borda de
+        # subida (solto -> pressionado); o firmware só reporta o estado cru,
+        # não gera nenhuma ação sozinho
+        self.status_botao_anterior = None
+        # Debounce do botão físico: evita registrar vários eventos em
+        # sequência por ruído elétrico/mau contato no circuito
+        self.ultimo_evento_botao = None
+        self.intervalo_debounce_botao = timedelta(milliseconds=300)
         self.dados_serial_atual = None
         self.acao_rele_pendente = None
 
@@ -205,6 +223,9 @@ class DashController(QMainWindow):
         self.comunicacao_controller.dados_serial_recebidos.connect(
             self.ao_receber_dados_serial
         )
+        self.comunicacao_controller.erro_comunicacao.connect(
+            self.ao_erro_comunicacao_serial
+        )
 
         # Monitora a conexão serial para reiniciar o estado quando ela muda
         # (funciona mesmo com a janela de comunicação aberta)
@@ -240,6 +261,7 @@ class DashController(QMainWindow):
         self.medicao_atual = None
         # Força nova sincronização com o estado real do hardware
         self.disjuntor_anterior = None
+        self.status_botao_anterior = None
         self.corte_emergencia_ativo = False
         self.limite_ultrapassado = False
 
@@ -439,7 +461,9 @@ class DashController(QMainWindow):
 
         self.grafico.setLabel("left", "Valor ADC")
         self.grafico.setLabel("bottom", "Horário")
-        self.grafico.setYRange(0, 1023, padding=0)
+        # A1 (corrente) é plotado centralizado em 0 (ver atualizar_grafico),
+        # já que o sensor é bidirecional - por isso o eixo é simétrico
+        self.grafico.setYRange(-1023, 1023, padding=0)
 
         self.grafico.showGrid(x=True, y=True, alpha=0.15)
         self.grafico.setMinimumHeight(190)
@@ -505,10 +529,10 @@ class DashController(QMainWindow):
         self.atualizar_subtitulo_grafico(historico)
 
         if self.modo_tempo_real:
-            # Tempo Real mantém a escala fixa (0-1023): referência estável
-            # de onde o valor está dentro da faixa do ADC
+            # Tempo Real mantém a escala fixa: referência estável de onde o
+            # valor está dentro da faixa do ADC (A1 centralizado em 0)
             self.grafico.enableAutoRange(axis="y", enable=False)
-            self.grafico.setYRange(0, 1023, padding=0)
+            self.grafico.setYRange(-1023, 1023, padding=0)
         else:
             # Histórico: o eixo Y se ajusta automaticamente conforme o
             # usuário dá zoom/arrasta no gráfico, pra enxergar de perto
@@ -531,8 +555,16 @@ class DashController(QMainWindow):
             for item in historico
         ]
 
+        # Centraliza A1 (corrente) em 0: o sensor é bidirecional e o centro
+        # da escala do ADC (Medicao.OFFSET_CORRENTE) representa corrente
+        # zero, então sem esse deslocamento a curva nunca apareceria negativa.
+        # Com o relé aberto, a1 é gravado como 0 (não como o centro da
+        # escala) pra representar "sem corrente" - trata esse caso à parte
+        # pra não aparecer como um pico de -512 (corrente reversa máxima)
         valores_a1 = [
-            item["a1"]
+            0
+            if item.get("status_rele") == 0
+            else item["a1"] - Medicao.OFFSET_CORRENTE
             for item in historico
         ]
 
@@ -658,7 +690,7 @@ class DashController(QMainWindow):
                 "Aguardando dados do Arduino."
             )
             self.ui.lbl_status_atualizacao.setText(
-                "Última atualização: --"
+                f"Última atualização: -- • {self.taxa_pacotes_atual} Hz"
             )
             return
 
@@ -728,8 +760,14 @@ class DashController(QMainWindow):
         horario = datetime.now().strftime("%H:%M:%S")
 
         self.ui.lbl_status_atualizacao.setText(
-            f"Última atualização: {horario}"
+            f"Última atualização: {horario} • {self.taxa_pacotes_atual} Hz"
         )
+
+    def atualizar_taxa_pacotes(self):
+        # Recalcula a taxa real de pacotes recebidos (Hz) uma vez por
+        # segundo, a partir da contagem acumulada desde o último cálculo
+        self.taxa_pacotes_atual = self.contador_pacotes_segundo
+        self.contador_pacotes_segundo = 0
 
     def marcar_limite_pendente(self):
         # O valor digitado ainda não foi confirmado.
@@ -754,7 +792,7 @@ class DashController(QMainWindow):
         limite = self.limite_potencia_aplicado
 
         ultrapassou_limite = (
-            self.medicao_atual.potencia > limite
+            abs(self.medicao_atual.potencia) > limite
         )
 
         if ultrapassou_limite:
@@ -823,9 +861,9 @@ class DashController(QMainWindow):
             )
             return
 
-        if potencia < 0 or limite < 0:
+        if limite < 0:
             logger.warning(
-                "Proteção automática ignorada: potência ou limite negativo."
+                "Proteção automática ignorada: limite de potência negativo."
             )
             return
 
@@ -850,8 +888,10 @@ class DashController(QMainWindow):
             return
 
         # Usa somente valores validados e o limite de potência confirmado
+        # Compara pelo módulo pois a corrente é bidirecional (ACS712):
+        # uma sobrecorrente no sentido reverso também deve disparar a proteção
         sobrecorrente_severa = (
-            potencia > limite * self.fator_sobrecorrente
+            abs(potencia) > limite * self.fator_sobrecorrente
         )
 
         if not sobrecorrente_severa:
@@ -938,7 +978,7 @@ class DashController(QMainWindow):
         limite = self.limite_potencia_aplicado
 
         ultrapassou_limite = (
-            medicao.potencia > limite
+            abs(medicao.potencia) > limite
         )
 
         # Atualiza a indicação visual do limite
@@ -993,6 +1033,19 @@ class DashController(QMainWindow):
         # Persiste em segundo plano (Database Worker Thread); falhas chegam
         # de forma assíncrona em ao_falha_persistencia
         self.solicitar_registro_evento.emit(registro)
+
+    def ao_erro_comunicacao_serial(self, mensagem):
+        # A falha em si já foi registrada em smartgrid.log pelo
+        # ComunicacaoController - aqui só garante que também fique visível
+        # no histórico de eventos da interface (ex.: desconexão do USB)
+        self.adicionar_registro(
+            tipo="Alerta",
+            descricao=(
+                "Comunicação serial interrompida inesperadamente "
+                f"(ex.: cabo/USB desconectado). Detalhes: {mensagem}"
+            ),
+            valor=self.formatar_medicao()
+        )
 
     def carregar_registros(self):
         # Solicita o histórico de eventos ao worker de persistência; a
@@ -1416,6 +1469,10 @@ class DashController(QMainWindow):
                 erro
             )
 
+        # Registra a borda de subida do botão físico (não aciona o relé:
+        # o firmware não liga o botão a nenhuma ação, é só telemetria crua)
+        self.verificar_botao_fisico(dados["status_botao"])
+
         # Verifica se existe uma operação aguardando confirmação
         if self.acao_rele_pendente is not None:
             acao = self.acao_rele_pendente
@@ -1590,6 +1647,42 @@ class DashController(QMainWindow):
         if self.medicao_atual is not None:
             self.verificar_protecao_sobrecorrente()
 
+    # Detecta quando o botão físico da bancada é pressionado (borda de
+    # subida) e só registra o evento no histórico - o firmware não aciona
+    # o relé sozinho por causa do botão, então o software também não aciona
+    def verificar_botao_fisico(self, status_botao):
+        try:
+            pressionado = int(status_botao) == 1
+        except (TypeError, ValueError):
+            return
+
+        if self.status_botao_anterior is None:
+            self.status_botao_anterior = pressionado
+            return
+
+        if pressionado and not self.status_botao_anterior:
+            agora = datetime.now()
+
+            # Debounce: ignora detecções muito próximas no tempo - protege
+            # contra ruído elétrico/mau contato no circuito do botão (pino
+            # flutuando ou solto gera várias transições falsas por segundo),
+            # sem depender de alterar o firmware (que é padronizado e fixo)
+            deve_registrar = (
+                self.ultimo_evento_botao is None
+                or (agora - self.ultimo_evento_botao) >= self.intervalo_debounce_botao
+            )
+
+            if deve_registrar:
+                logger.info("Botão físico pressionado na bancada.")
+                self.adicionar_registro(
+                    tipo="Status",
+                    descricao="Botão físico pressionado na bancada.",
+                    valor=self.formatar_medicao()
+                )
+                self.ultimo_evento_botao = agora
+
+        self.status_botao_anterior = pressionado
+
     # Registra os dados brutos recebidos do Arduino
     def registrar_telemetria_bruta(self, dados, rele_ligado=True):
         # Guarda o instante da leitura
@@ -1609,6 +1702,9 @@ class DashController(QMainWindow):
 
         if status_rele not in (0, 1):
             raise ValueError("Estado do relé inválido")
+
+        # Conta o pacote válido pra taxa de Hz exibida na interface
+        self.contador_pacotes_segundo += 1
 
         # Organiza os dados recebidos
         # Com o relé aberto os sinais são registrados como 0 (curva mostra o corte)
@@ -1634,22 +1730,25 @@ class DashController(QMainWindow):
         if self.medicao_atual is not None:
             self.solicitar_gravacao_leitura.emit(self.medicao_atual)
 
-        # Atualiza o gráfico em taxa limitada (redesenho é custo de GUI,
-        # independente da persistência já estar fora dessa thread). Só faz
-        # sentido redesenhar aqui no modo Tempo Real: no Histórico, a curva
-        # exibida é um snapshot estático do SQLite que não muda a cada
-        # leitura nova, e redesenhar mesmo assim resetava o zoom/arrasto que
-        # o usuário tivesse feito manualmente no gráfico a cada ~100ms
-        if self.modo_tempo_real:
-            deve_redesenhar = (
-                self.ultimo_redesenho_grafico is None
-                or (instante - self.ultimo_redesenho_grafico)
-                >= self.intervalo_redesenho_grafico
-            )
+        # Atualiza o gráfico e os indicadores numéricos em taxa limitada: a
+        # telemetria chega a até 200 Hz, e atualizar a GUI nessa taxa além de
+        # ser custo desnecessário (a persistência já roda em outra thread)
+        # deixa os números de tensão/corrente/potência ilegíveis de tão
+        # rápido que piscam
+        deve_redesenhar = (
+            self.ultimo_redesenho_grafico is None
+            or (instante - self.ultimo_redesenho_grafico)
+            >= self.intervalo_redesenho_grafico
+        )
 
-            if deve_redesenhar:
+        if deve_redesenhar:
+            self.ultimo_redesenho_grafico = instante
+
+            # Só faz sentido redesenhar o gráfico aqui no modo Tempo Real:
+            # no Histórico, a curva exibida é um snapshot estático do
+            # SQLite que não muda a cada leitura nova, e redesenhar mesmo
+            # assim resetava o zoom/arrasto que o usuário tivesse feito
+            if self.modo_tempo_real:
                 self.atualizar_grafico()
-                self.ultimo_redesenho_grafico = instante
 
-        # Indicadores numéricos continuam em tempo real, a cada leitura
-        self.atualizar_dashboard()
+            self.atualizar_dashboard()
