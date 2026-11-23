@@ -1,9 +1,9 @@
 {
   "porta_serial": "/dev/ttyACM0",
-  "baud_rate": "115200",
+  "baud_rate": "9600",
   "timeout_serial": 2.0,
   "taxa_amostragem_hz": 200,
-  "limite_tensao_max": 0.0,
-  "limite_corrente_max": 0.0,
-  "limite_potencia_max": 0.0
+  "limite_tensao_max": 15.0,
+  "limite_corrente_max": 5.0,
+  "limite_potencia_max": 75.0
 }

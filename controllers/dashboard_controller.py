@@ -106,14 +106,12 @@ class DashController(QMainWindow):
         self.medicao_atual = None
         # Guarda o estado anterior do disjuntor, inicialmente desconhecido
         self.disjuntor_anterior = None
-        # Guarda o estado anterior do botão físico, pra detectar a borda de
-        # subida (solto -> pressionado); o firmware só reporta o estado cru,
-        # não gera nenhuma ação sozinho
-        self.status_botao_anterior = None
-        # Debounce do botão físico: evita registrar vários eventos em
-        # sequência por ruído elétrico/mau contato no circuito
-        self.ultimo_evento_botao = None
-        self.intervalo_debounce_botao = timedelta(milliseconds=300)
+        # Confirmação do botão físico por leituras consecutivas (não por uma
+        # única amostra) - protege contra ruído/mau contato no circuito;
+        # o firmware só reporta o estado cru, não gera nenhuma ação sozinho
+        self.amostras_botao_pressionado = 0
+        self.amostras_confirmacao_botao = 3
+        self.botao_confirmado = False
         self.dados_serial_atual = None
         self.acao_rele_pendente = None
 
@@ -261,7 +259,8 @@ class DashController(QMainWindow):
         self.medicao_atual = None
         # Força nova sincronização com o estado real do hardware
         self.disjuntor_anterior = None
-        self.status_botao_anterior = None
+        self.amostras_botao_pressionado = 0
+        self.botao_confirmado = False
         self.corte_emergencia_ativo = False
         self.limite_ultrapassado = False
 
@@ -1647,41 +1646,39 @@ class DashController(QMainWindow):
         if self.medicao_atual is not None:
             self.verificar_protecao_sobrecorrente()
 
-    # Detecta quando o botão físico da bancada é pressionado (borda de
-    # subida) e só registra o evento no histórico - o firmware não aciona
-    # o relé sozinho por causa do botão, então o software também não aciona
+    # Detecta quando o botão físico da bancada é pressionado e registra o
+    # evento no histórico - o firmware não aciona o relé sozinho por causa
+    # do botão, então o software também não aciona
     def verificar_botao_fisico(self, status_botao):
         try:
             pressionado = int(status_botao) == 1
         except (TypeError, ValueError):
             return
 
-        if self.status_botao_anterior is None:
-            self.status_botao_anterior = pressionado
+        if not pressionado:
+            # Solta o "trava" assim que vir uma leitura de botão solto, pra
+            # permitir detectar o próximo pressionamento de verdade
+            self.amostras_botao_pressionado = 0
+            self.botao_confirmado = False
             return
 
-        if pressionado and not self.status_botao_anterior:
-            agora = datetime.now()
+        # Exige algumas leituras seguidas confirmando "pressionado" antes de
+        # considerar um toque real - protege contra mau contato/ruído no
+        # circuito do botão, que pode gerar transições de 1 único pacote
+        # (5ms) sem relação com um toque físico de verdade
+        self.amostras_botao_pressionado += 1
 
-            # Debounce: ignora detecções muito próximas no tempo - protege
-            # contra ruído elétrico/mau contato no circuito do botão (pino
-            # flutuando ou solto gera várias transições falsas por segundo),
-            # sem depender de alterar o firmware (que é padronizado e fixo)
-            deve_registrar = (
-                self.ultimo_evento_botao is None
-                or (agora - self.ultimo_evento_botao) >= self.intervalo_debounce_botao
+        if (
+            not self.botao_confirmado
+            and self.amostras_botao_pressionado >= self.amostras_confirmacao_botao
+        ):
+            self.botao_confirmado = True
+            logger.info("Botão físico pressionado na bancada.")
+            self.adicionar_registro(
+                tipo="Status",
+                descricao="Botão físico pressionado na bancada.",
+                valor=self.formatar_medicao()
             )
-
-            if deve_registrar:
-                logger.info("Botão físico pressionado na bancada.")
-                self.adicionar_registro(
-                    tipo="Status",
-                    descricao="Botão físico pressionado na bancada.",
-                    valor=self.formatar_medicao()
-                )
-                self.ultimo_evento_botao = agora
-
-        self.status_botao_anterior = pressionado
 
     # Registra os dados brutos recebidos do Arduino
     def registrar_telemetria_bruta(self, dados, rele_ligado=True):
